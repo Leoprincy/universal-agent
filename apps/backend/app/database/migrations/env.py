@@ -4,6 +4,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from app.core.config import get_settings
+from app.database.models import Base
 
 config = context.config
 
@@ -16,7 +17,7 @@ if settings.database_url is None:
 
 # Alembic's Config uses percent interpolation; preserve URL-encoded percent signs.
 config.set_main_option("sqlalchemy.url", settings.database_url.get_secret_value().replace("%", "%%"))
-target_metadata = None
+target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:

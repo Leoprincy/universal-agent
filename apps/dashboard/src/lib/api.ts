@@ -1,4 +1,10 @@
-import type { HealthResponse, SystemInfo } from "../types";
+import type {
+  HealthResponse,
+  Project,
+  ProjectCreateInput,
+  ProjectListResponse,
+  SystemInfo,
+} from "../types";
 
 const configuredBaseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
 const apiBaseUrl = configuredBaseUrl.replace(/\/$/, "");
@@ -19,6 +25,36 @@ export function getHealth(): Promise<HealthResponse> {
 
 export function getSystemInfo(): Promise<SystemInfo> {
   return getJson<SystemInfo>("/api/v1/system/info");
+}
+
+export function listProjects(): Promise<ProjectListResponse> {
+  return getJson<ProjectListResponse>("/api/v1/projects");
+}
+
+export async function createProject(data: ProjectCreateInput): Promise<Project> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/projects`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    const msg = errorBody?.error?.message ?? `Backend returned HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+  return (await response.json()) as Project;
+}
+
+export async function deleteProject(id: string): Promise<void> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/projects/${id}`, {
+    method: "DELETE",
+  });
+  if (!response.ok && response.status !== 204) {
+    throw new Error(`Failed to delete project: HTTP ${response.status}`);
+  }
 }
 
 export function getApiBaseUrl(): string {

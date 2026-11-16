@@ -28,3 +28,43 @@ Component status is `connected`, `not_configured`, or `unavailable`. Aggregate s
 ```
 
 This response deliberately excludes environment variables, connection strings, and credentials.
+
+## `GET /api/v1/projects`
+
+Returns the list of growth projects in this workspace.
+
+```json
+{
+  "items": [
+    {
+      "id": "7b8e1e72-1c23-4d56-8e9a-0b1c2d3e4f5a",
+      "name": "Android Part-Time Jobs App",
+      "slug": "android-part-time-jobs-app",
+      "description": "Mobile app connecting students with local part-time opportunities.",
+      "category": "mobile_app",
+      "status": "active",
+      "target_audience": "University students and local retail/service businesses",
+      "metadata": { "platform": "Android", "package_name": "com.parttime.jobs" },
+      "created_at": "2026-11-16T12:00:00Z",
+      "updated_at": "2026-11-16T12:00:00Z"
+    }
+  ],
+  "total": 1
+}
+```
+
+## `POST /api/v1/projects`
+
+Creates a new growth project. Returns HTTP 201 Created.
+
+Request body:
+```json
+{
+  "name": "Android Part-Time Jobs App",
+  "slug": "android-part-time-jobs-app",
+  "description": "Mobile app connecting students with local part-time opportunities.",
+  "category": "mobile_app",
+  "target_audience": "University students and local retail/service businesses",
+  "metadata": { "platform": "Android" }
+}
+```

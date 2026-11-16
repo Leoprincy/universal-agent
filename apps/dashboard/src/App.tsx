@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
   ArrowDownRight,
@@ -17,11 +17,27 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Trash2,
   WifiOff,
+  X,
   type LucideIcon,
 } from "lucide-react";
-import { getApiBaseUrl, getHealth, getSystemInfo } from "./lib/api";
-import type { ComponentHealth, HealthResponse, SystemInfo } from "./types";
+import {
+  createProject,
+  deleteProject,
+  getApiBaseUrl,
+  getHealth,
+  getSystemInfo,
+  listProjects,
+} from "./lib/api";
+import type {
+  ComponentHealth,
+  HealthResponse,
+  Project,
+  ProjectCategory,
+  ProjectCreateInput,
+  SystemInfo,
+} from "./types";
 
 type Page = "Overview" | "Projects" | "Agent Activity" | "Settings";
 type Connection =
@@ -39,6 +55,17 @@ function App() {
   const [page, setPage] = useState<Page>("Overview");
   const [connection, setConnection] = useState<Connection>({ state: "loading" });
   const [refreshing, setRefreshing] = useState(false);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  const fetchProjects = useCallback(async () => {
+    try {
+      const result = await listProjects();
+      setProjects(result.items);
+    } catch {
+      // Projects list is non-critical; leave stale data in place
+    }
+  }, []);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
@@ -55,7 +82,8 @@ function App() {
       setConnection({ state: "offline", checkedAt });
     }
     setRefreshing(false);
-  }, []);
+    void fetchProjects();
+  }, [fetchProjects]);
 
   useEffect(() => {
     void refresh();
@@ -94,6 +122,9 @@ function App() {
             >
               <Icon size={17} strokeWidth={1.8} />
               <span>{label}</span>
+              {label === "Projects" && projects.length > 0 && (
+                <span className="nav-count">{projects.length}</span>
+              )}
               {label === "Agent Activity" && <span className="nav-count">0</span>}
             </button>
           ))}
@@ -133,8 +164,25 @@ function App() {
         </header>
 
         <div className="page-content">
-          {page === "Overview" && <Overview connection={connection} onOpenSettings={() => setPage("Settings")} onOpenProjects={() => setPage("Projects")} />}
-          {page === "Projects" && <EmptyPage kind="projects" />}
+          {page === "Overview" && (
+            <Overview
+              connection={connection}
+              projects={projects}
+              onOpenSettings={() => setPage("Settings")}
+              onOpenProjects={() => setPage("Projects")}
+              onNewProject={() => { setPage("Projects"); setModalOpen(true); }}
+            />
+          )}
+          {page === "Projects" && (
+            <ProjectsPage
+              projects={projects}
+              modalOpen={modalOpen}
+              onOpenModal={() => setModalOpen(true)}
+              onCloseModal={() => setModalOpen(false)}
+              onProjectCreated={(p) => { setProjects((prev) => [p, ...prev]); setModalOpen(false); }}
+              onProjectDeleted={(id) => setProjects((prev) => prev.filter((p) => p.id !== id))}
+            />
+          )}
           {page === "Agent Activity" && <EmptyPage kind="activity" />}
           {page === "Settings" && <SettingsPage connection={connection} />}
         </div>
@@ -143,9 +191,25 @@ function App() {
   );
 }
 
-function Overview({ connection, onOpenSettings, onOpenProjects }: { connection: Connection; onOpenSettings: () => void; onOpenProjects: () => void }) {
+// ─── Overview ────────────────────────────────────────────────────────────────
+
+function Overview({
+  connection,
+  projects,
+  onOpenSettings,
+  onOpenProjects,
+  onNewProject,
+}: {
+  connection: Connection;
+  projects: Project[];
+  onOpenSettings: () => void;
+  onOpenProjects: () => void;
+  onNewProject: () => void;
+}) {
   const health = connection.state === "online" ? connection.health : undefined;
-  const connectedCount = health ? [health.database, health.redis].filter((item) => item.status === "connected").length : undefined;
+  const connectedCount = health
+    ? [health.database, health.redis].filter((item) => item.status === "connected").length
+    : undefined;
 
   return (
     <>
@@ -176,12 +240,12 @@ function Overview({ connection, onOpenSettings, onOpenProjects }: { connection: 
           trend={health ? <ShieldCheck size={14} /> : <LoaderCircle size={14} className="spin" />}
         />
         <MetricCard
-          icon={Server}
-          label="ENVIRONMENT"
-          value={connection.state === "online" ? (connection.system?.environment ?? "Available") : "—"}
-          detail={connection.state === "online" ? "Active backend configuration" : "Unavailable until API responds"}
+          icon={Command}
+          label="PROJECTS"
+          value={String(projects.length)}
+          detail={projects.length === 0 ? "No projects yet — add your first" : projects.length === 1 ? "1 active project" : `${projects.length} projects in workspace`}
           tone="violet"
-          trend={<Server size={14} />}
+          trend={<Plus size={14} />}
         />
       </section>
 
@@ -212,13 +276,27 @@ function Overview({ connection, onOpenSettings, onOpenProjects }: { connection: 
         <section className="panel workspace-panel">
           <div className="panel-heading">
             <div><span className="panel-kicker">YOUR WORKSPACE</span><h2>Growth projects</h2></div>
-            <button className="icon-button" onClick={onOpenProjects} aria-label="Open projects"><Plus size={16} /></button>
+            <button className="icon-button" onClick={onNewProject} aria-label="Add new project"><Plus size={16} /></button>
           </div>
-          <div className="project-empty-compact">
-            <div className="empty-art"><div className="empty-art-center"><Sparkles size={20} /></div><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-dot" /></div>
-            <strong>No projects yet</strong>
-            <span>Projects will show up here when added.</span>
-          </div>
+          {projects.length === 0 ? (
+            <div className="project-empty-compact">
+              <div className="empty-art"><div className="empty-art-center"><Sparkles size={20} /></div><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-dot" /></div>
+              <strong>No projects yet</strong>
+              <span>Projects will show up here when added.</span>
+            </div>
+          ) : (
+            <div className="compact-project-list">
+              {projects.slice(0, 4).map((p) => (
+                <div key={p.id} className="compact-project-row" onClick={onOpenProjects} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && onOpenProjects()}>
+                  <div className="compact-project-name">{p.name}</div>
+                  <span className={`badge badge-${p.status}`}>{p.status}</span>
+                </div>
+              ))}
+              {projects.length > 4 && (
+                <button className="text-button" onClick={onOpenProjects}>+{projects.length - 4} more</button>
+              )}
+            </div>
+          )}
           <button className="panel-link" onClick={onOpenProjects}>Explore projects <ArrowUpRight size={14} /></button>
         </section>
       </div>
@@ -232,6 +310,226 @@ function Overview({ connection, onOpenSettings, onOpenProjects }: { connection: 
     </>
   );
 }
+
+// ─── Projects page ────────────────────────────────────────────────────────────
+
+function ProjectsPage({
+  projects,
+  modalOpen,
+  onOpenModal,
+  onCloseModal,
+  onProjectCreated,
+  onProjectDeleted,
+}: {
+  projects: Project[];
+  modalOpen: boolean;
+  onOpenModal: () => void;
+  onCloseModal: () => void;
+  onProjectCreated: (p: Project) => void;
+  onProjectDeleted: (id: string) => void;
+}) {
+  const handleDelete = async (p: Project) => {
+    if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
+    try {
+      await deleteProject(p.id);
+      onProjectDeleted(p.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : "Failed to delete project.");
+    }
+  };
+
+  return (
+    <div className="empty-page-wrap">
+      <div className="page-heading flex items-end justify-between">
+        <div>
+          <div className="eyebrow"><span className="eyebrow-line" /> WORKSPACE</div>
+          <h1>Projects<span className="heading-period">.</span></h1>
+          <p className="page-subtitle">Organize the products you want to grow.</p>
+        </div>
+        <button className="button button-primary" onClick={onOpenModal}><Plus size={15} /> New project</button>
+      </div>
+
+      {projects.length === 0 ? (
+        <section className="empty-page panel">
+          <div className="empty-page-icon"><Command size={22} strokeWidth={1.6} /></div>
+          <span className="panel-kicker">PROJECT WORKSPACE</span>
+          <h2>Your projects start here</h2>
+          <p>There are no projects in this workspace. Add a product when you're ready to start organizing growth work.</p>
+          <button className="button button-primary" style={{ marginTop: "1.25rem" }} onClick={onOpenModal}><Plus size={15} /> Add your first project</button>
+        </section>
+      ) : (
+        <div className="projects-grid">
+          {projects.map((p) => (
+            <ProjectCard key={p.id} project={p} onDelete={() => void handleDelete(p)} />
+          ))}
+        </div>
+      )}
+
+      {modalOpen && (
+        <CreateProjectModal onClose={onCloseModal} onCreated={onProjectCreated} />
+      )}
+    </div>
+  );
+}
+
+function ProjectCard({ project, onDelete }: { project: Project; onDelete: () => void }) {
+  return (
+    <article className="project-card panel">
+      <div className="project-card-header">
+        <div>
+          <div className="project-card-name">{project.name}</div>
+          <div className="project-card-slug">/{project.slug}</div>
+        </div>
+        <button className="icon-button danger" onClick={onDelete} aria-label={`Delete ${project.name}`} title="Delete project">
+          <Trash2 size={15} />
+        </button>
+      </div>
+      {project.description && <p className="project-card-desc">{project.description}</p>}
+      <div className="project-card-footer">
+        <span className={`badge badge-category`}>{project.category.replace("_", " ")}</span>
+        <span className={`badge badge-${project.status}`}>{project.status}</span>
+      </div>
+    </article>
+  );
+}
+
+// ─── Create project modal ─────────────────────────────────────────────────────
+
+const CATEGORY_OPTIONS: { value: ProjectCategory; label: string }[] = [
+  { value: "mobile_app", label: "Mobile app" },
+  { value: "web_app", label: "Web app" },
+  { value: "saas", label: "SaaS" },
+  { value: "ecommerce", label: "E-commerce" },
+  { value: "other", label: "Other" },
+];
+
+function CreateProjectModal({
+  onClose,
+  onCreated,
+}: {
+  onClose: () => void;
+  onCreated: (p: Project) => void;
+}) {
+  const [name, setName] = useState("");
+  const [category, setCategory] = useState<ProjectCategory>("mobile_app");
+  const [description, setDescription] = useState("");
+  const [targetAudience, setTargetAudience] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    nameRef.current?.focus();
+  }, []);
+
+  const quickFill = () => {
+    setName("Android Part-Time Jobs App");
+    setCategory("mobile_app");
+    setDescription("A mobile application for finding and applying to part-time job listings on Android devices.");
+    setTargetAudience("Job seekers aged 18–35 looking for flexible part-time work via Android smartphones.");
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) { setError("Project name is required."); return; }
+    setSubmitting(true);
+    try {
+      const payload: ProjectCreateInput = {
+        name: name.trim(),
+        category,
+        description: description.trim() || undefined,
+        target_audience: targetAudience.trim() || undefined,
+      };
+      const created = await createProject(payload);
+      onCreated(created);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Create project" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-dialog">
+        <div className="modal-header">
+          <h2>New project</h2>
+          <button className="icon-button" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
+        </div>
+
+        <button type="button" className="button button-quiet quick-fill-btn" onClick={quickFill}>
+          Quick-fill sample data
+        </button>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="modal-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="proj-name">Project name *</label>
+            <input
+              ref={nameRef}
+              id="proj-name"
+              className="form-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Android Part-Time Jobs App"
+              required
+            />
+          </div>
+
+          <div className="form-field">
+            <label className="form-label" htmlFor="proj-category">Category</label>
+            <select
+              id="proj-category"
+              className="form-select"
+              value={category}
+              onChange={(e) => setCategory(e.target.value as ProjectCategory)}
+            >
+              {CATEGORY_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="form-field">
+            <label className="form-label" htmlFor="proj-desc">Description</label>
+            <textarea
+              id="proj-desc"
+              className="form-textarea"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="What is this project about?"
+              rows={3}
+            />
+          </div>
+
+          <div className="form-field">
+            <label className="form-label" htmlFor="proj-audience">Target audience</label>
+            <textarea
+              id="proj-audience"
+              className="form-textarea"
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              placeholder="Who are you building this for?"
+              rows={2}
+            />
+          </div>
+
+          {error && <div className="form-error">{error}</div>}
+
+          <div className="modal-actions">
+            <button type="button" className="button button-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? <><LoaderCircle size={14} className="spin" /> Creating…</> : "Create project"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Shared components ────────────────────────────────────────────────────────
 
 function MetricCard({ icon: Icon, label, value, detail, tone, trend }: { icon: LucideIcon; label: string; value: string; detail: string; tone: string; trend: ReactNode }) {
   return (
@@ -259,19 +557,17 @@ function StatusBadge({ status, label }: { status: ComponentHealth["status"]; lab
   return <span className={`status-badge ${status}`}><span className="status-dot" />{label}</span>;
 }
 
-function EmptyPage({ kind }: { kind: "projects" | "activity" }) {
-  const projects = kind === "projects";
-  const Icon = projects ? Command : Activity;
+function EmptyPage(_: { kind: "activity" }) {
   return (
     <div className="empty-page-wrap">
       <div className="page-heading">
-        <div><div className="eyebrow"><span className="eyebrow-line" /> WORKSPACE</div><h1>{projects ? "Projects" : "Agent activity"}<span className="heading-period">.</span></h1><p className="page-subtitle">{projects ? "Organize the products you want to grow." : "A timeline of actions and outcomes across your workspace."}</p></div>
+        <div><div className="eyebrow"><span className="eyebrow-line" /> WORKSPACE</div><h1>Agent activity<span className="heading-period">.</span></h1><p className="page-subtitle">A timeline of actions and outcomes across your workspace.</p></div>
       </div>
       <section className="empty-page panel">
-        <div className="empty-page-icon"><Icon size={22} strokeWidth={1.6} /></div>
-        <span className="panel-kicker">{projects ? "PROJECT WORKSPACE" : "ACTIVITY TIMELINE"}</span>
-        <h2>{projects ? "Your projects start here" : "Nothing happening yet"}</h2>
-        <p>{projects ? "There are no projects in this workspace. Add a product when you’re ready to start organizing growth work." : "Agent activity and campaign events will appear here as work is introduced to the platform."}</p>
+        <div className="empty-page-icon"><Activity size={22} strokeWidth={1.6} /></div>
+        <span className="panel-kicker">ACTIVITY TIMELINE</span>
+        <h2>Nothing happening yet</h2>
+        <p>Agent activity and campaign events will appear here as work is introduced to the platform.</p>
       </section>
     </div>
   );
@@ -282,7 +578,7 @@ function SettingsPage({ connection }: { connection: Connection }) {
   const system = connection.state === "online" ? connection.system : undefined;
   return (
     <div className="settings-page">
-      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> PREFERENCES</div><h1>Settings<span className="heading-period">.</span></h1><p className="page-subtitle">Review this dashboard’s connection and runtime configuration.</p></div></div>
+      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line" /> PREFERENCES</div><h1>Settings<span className="heading-period">.</span></h1><p className="page-subtitle">Review this dashboard's connection and runtime configuration.</p></div></div>
       <section className="panel settings-section">
         <div className="settings-section-heading"><div className="settings-section-icon"><Server size={16} /></div><div><h2>Application</h2><p>Values reported by the running backend.</p></div></div>
         <div className="settings-rows">

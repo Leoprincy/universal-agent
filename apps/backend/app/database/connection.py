@@ -3,6 +3,7 @@ import logging
 
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.schemas.health import ComponentHealth
 
@@ -29,10 +30,20 @@ class DatabaseConnection:
             if database_url
             else None
         )
+        self._session_factory = (
+            sessionmaker(bind=self._engine, autoflush=False, autocommit=False)
+            if self._engine
+            else None
+        )
 
     @property
     def configured(self) -> bool:
         return self._engine is not None
+
+    def get_session(self) -> Session:
+        if self._session_factory is None:
+            raise RuntimeError("Database connection is not configured")
+        return self._session_factory()
 
     async def check(self) -> ComponentHealth:
         if self._engine is None:
