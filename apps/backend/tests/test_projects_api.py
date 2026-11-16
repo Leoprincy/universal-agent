@@ -222,57 +222,90 @@ def test_project_api_conflict_and_missing_handling(test_app):
     asyncio.run(run())
 
 
-def test_project_api_workspace_isolation(test_app):
+def test_client_header_cannot_spoof_workspace_owner(test_app):
     async def run():
         async with test_app.router.lifespan_context(test_app):
             async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
-                # Team 1 creates a project
-                r1 = await client.post(
+                # 1. Attacker sends X-Workspace-Owner: attacker-workspace
+                # System must ignore it and bind to server-configured workspace_owner ("default")
+                r_create = await client.post(
                     "/api/v1/projects",
-                    json={"name": "Team 1 Secret App"},
-                    headers={"X-Workspace-Owner": "team-1"},
+                    json={"name": "Attacker Target Project"},
+                    headers={"X-Workspace-Owner": "attacker-workspace"},
                 )
-                assert r1.status_code == 201
-                p1_id = r1.json()["id"]
-                assert r1.json()["owner"] == "team-1"
+                assert r_create.status_code == 201
+                created = r_create.json()
+                assert created["owner"] == "default"
+                project_id = created["id"]
 
-                # Team 2 creates a project
-                r2 = await client.post(
+                # Listing with X-Workspace-Owner: attacker-workspace still lists the server workspace
+                r_list = await client.get(
                     "/api/v1/projects",
-                    json={"name": "Team 2 Secret App"},
-                    headers={"X-Workspace-Owner": "team-2"},
+                    headers={"X-Workspace-Owner": "attacker-workspace"},
                 )
-                assert r2.status_code == 201
-                assert r2.json()["owner"] == "team-2"
+                assert r_list.status_code == 200
+                items = r_list.json()["items"]
+                assert any(p["id"] == project_id for p in items)
 
-                # Team 2 lists projects -> should only see Team 2's app
-                r2_list = await client.get("/api/v1/projects", headers={"X-Workspace-Owner": "team-2"})
-                assert r2_list.status_code == 200
-                items2 = r2_list.json()["items"]
-                assert len(items2) == 1
-                assert items2[0]["name"] == "Team 2 Secret App"
+                # 2. Server configured with custom workspace_owner
+                test_app.state.settings.workspace_owner = "custom-owner"
+                try:
+                    # Client sends X-Workspace-Owner: default
+                    # System must ignore it and use "custom-owner"
+                    r_custom = await client.post(
+                        "/api/v1/projects",
+                        json={"name": "Custom Owner Project"},
+                        headers={"X-Workspace-Owner": "default"},
+                    )
+                    assert r_custom.status_code == 201
+                    assert r_custom.json()["owner"] == "custom-owner"
 
-                # Team 2 tries to GET Team 1's app -> 404 Not Found
-                r_cross_get = await client.get(
-                    f"/api/v1/projects/{p1_id}",
-                    headers={"X-Workspace-Owner": "team-2"},
+                    # List scoped to custom-owner
+                    r_custom_list = await client.get("/api/v1/projects")
+                    assert r_custom_list.status_code == 200
+                    custom_items = r_custom_list.json()["items"]
+                    assert all(p["owner"] == "custom-owner" for p in custom_items)
+                    # "default" project is not visible in "custom-owner" workspace
+                    assert not any(p["id"] == project_id for p in custom_items)
+                finally:
+                    test_app.state.settings.workspace_owner = "default"
+
+    asyncio.run(run())
+
+
+def test_client_body_cannot_inject_or_transfer_owner(test_app):
+    async def run():
+        async with test_app.router.lifespan_context(test_app):
+            async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+                # 1. Client supplies "owner": "injected-tenant" in POST body
+                # The schema/service must ignore it and assign server-configured owner
+                r_create = await client.post(
+                    "/api/v1/projects",
+                    json={"name": "Injected Owner App", "owner": "injected-tenant"},
                 )
-                assert r_cross_get.status_code == 404
+                assert r_create.status_code == 201
+                created = r_create.json()
+                assert created["owner"] == "default"
+                project_id = created["id"]
 
-                # Team 2 tries to PATCH Team 1's app -> 404 Not Found
-                r_cross_patch = await client.patch(
-                    f"/api/v1/projects/{p1_id}",
-                    json={"name": "Compromised"},
-                    headers={"X-Workspace-Owner": "team-2"},
-                )
-                assert r_cross_patch.status_code == 404
+                # Verify via GET that owner is indeed "default"
+                r_get = await client.get(f"/api/v1/projects/{project_id}")
+                assert r_get.status_code == 200
+                assert r_get.json()["owner"] == "default"
 
-                # Team 2 tries to DELETE Team 1's app -> 404 Not Found
-                r_cross_del = await client.delete(
-                    f"/api/v1/projects/{p1_id}",
-                    headers={"X-Workspace-Owner": "team-2"},
+                # 2. Client attempts to transfer ownership via PATCH body
+                r_patch = await client.patch(
+                    f"/api/v1/projects/{project_id}",
+                    json={"name": "Transferred App", "owner": "transferred-tenant"},
                 )
-                assert r_cross_del.status_code == 404
+                assert r_patch.status_code == 200
+                assert r_patch.json()["owner"] == "default"
+
+                # Verify via GET that owner remains "default"
+                r_get2 = await client.get(f"/api/v1/projects/{project_id}")
+                assert r_get2.status_code == 200
+                assert r_get2.json()["owner"] == "default"
+                assert r_get2.json()["name"] == "Transferred App"
 
     asyncio.run(run())
 

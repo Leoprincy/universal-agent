@@ -64,7 +64,7 @@ class ProjectService:
 
     def create_project(self, data: ProjectCreate, owner: str = "default") -> Project:
         slug = data.slug or generate_slug(data.name)
-        project_owner = data.owner or owner
+        project_owner = owner
         # Check if slug exists
         existing = self._session.scalar(select(Project).where(Project.slug == slug))
         if existing:

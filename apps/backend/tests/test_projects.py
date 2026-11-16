@@ -206,3 +206,19 @@ def test_project_owner_isolation(db_session):
     # Team B cannot delete Team A's project
     with pytest.raises(NotFoundError):
         service.delete_project(p_team_a.id, owner="team-b")
+
+
+def test_service_owner_assignment_and_immutability(db_session):
+    service = ProjectService(db_session)
+    # Default owner
+    p_default = service.create_project(ProjectCreate(name="Default Project"))
+    assert p_default.owner == "default"
+
+    # Explicit server owner parameter
+    p_custom = service.create_project(ProjectCreate(name="Custom Project"), owner="custom-ws")
+    assert p_custom.owner == "custom-ws"
+
+    # Update cannot alter owner
+    updated = service.update_project(p_custom.id, ProjectUpdate(name="Renamed Project"), owner="custom-ws")
+    assert updated.name == "Renamed Project"
+    assert updated.owner == "custom-ws"

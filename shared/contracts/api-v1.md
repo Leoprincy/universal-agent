@@ -33,10 +33,10 @@ This response deliberately excludes environment variables, connection strings, a
 
 Returns the paginated list of growth projects in this workspace.
 
-Authentication:
-- Optional in default self-hosted mode (uses default workspace owner).
+Authentication & Workspace Scoping:
+- In default self-hosted mode (no `UGA_API_KEY` configured), requests access the server-configured workspace (`UGA_WORKSPACE_OWNER`, default `default`).
 - When `UGA_API_KEY` is configured in backend environment: requires `Authorization: Bearer <key>` or `X-API-Key: <key>`. Missing or invalid keys return HTTP 401 Unauthorized.
-- Optional `X-Workspace-Owner` header can be used to scope requests to a specific workspace owner.
+- Workspace identity is server-derived exclusively from `UGA_WORKSPACE_OWNER`. Client-supplied headers or request body fields cannot select or override the workspace owner.
 
 Query parameters:
 - `limit` (optional integer, default `50`, maximum `200`): Maximum items to return.

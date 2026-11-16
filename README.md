@@ -133,10 +133,10 @@ The `/api/v1/projects` endpoints manage products and growth workspaces:
 
 ### Authorization & Security Boundaries
 
-UGA supports deployment-appropriate authorization:
-- **Default Local Mode**: Zero-configuration local development associating operations with the default workspace (`UGA_WORKSPACE_OWNER=default`).
+UGA operates as a single-tenant, self-hosted deployment:
+- **Default Local Mode**: Zero-configuration local development associating operations with the server-configured workspace owner (`UGA_WORKSPACE_OWNER=default`).
 - **API Key Guard**: Setting `UGA_API_KEY` enforces bearer token (`Authorization: Bearer <key>`) or header (`X-API-Key: <key>`) verification across all endpoints. Missing or invalid keys return HTTP 401 Unauthorized.
-- **Workspace Isolation**: Optional `X-Workspace-Owner` header scopes project operations to specific workspaces, preventing cross-workspace data access.
+- **Server-Derived Identity**: The workspace identity is determined strictly by the server's `UGA_WORKSPACE_OWNER` configuration. Client-supplied headers (e.g. `X-Workspace-Owner`) or payload fields (e.g. `owner` in creation body) cannot select, inject, or alter workspace ownership.
 
 Stop local infrastructure with `docker compose down`. Named volumes keep the database and Redis data between runs.
 

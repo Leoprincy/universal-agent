@@ -17,7 +17,6 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     slug: str | None = Field(default=None, max_length=140)
-    owner: str | None = Field(default=None, max_length=100)
 
     @field_validator("slug")
     @classmethod

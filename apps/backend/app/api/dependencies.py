@@ -19,7 +19,6 @@ def get_current_identity(
     request: Request,
     authorization: str | None = Header(None),
     x_api_key: str | None = Header(None),
-    x_workspace_owner: str | None = Header(None),
 ) -> AuthIdentity:
     settings = request.app.state.settings
     configured_key = settings.api_key.get_secret_value() if settings.api_key else None
@@ -34,11 +33,9 @@ def get_current_identity(
         if not provided_key or provided_key != configured_key:
             raise UnauthorizedError("Invalid or missing API key")
 
-        owner = x_workspace_owner.strip() if x_workspace_owner else settings.workspace_owner
-        return AuthIdentity(owner=owner, authenticated=True)
+        return AuthIdentity(owner=settings.workspace_owner, authenticated=True)
 
-    owner = x_workspace_owner.strip() if x_workspace_owner else settings.workspace_owner
-    return AuthIdentity(owner=owner, authenticated=False)
+    return AuthIdentity(owner=settings.workspace_owner, authenticated=False)
 
 
 def get_health_service(request: Request) -> HealthService:
