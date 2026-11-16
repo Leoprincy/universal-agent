@@ -25,12 +25,16 @@ class ProjectService:
         self,
         status: str | None = None,
         category: str | None = None,
+        owner: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> tuple[Sequence[Project], int]:
         base_query = select(Project)
         count_query = select(func.count()).select_from(Project)
 
+        if owner:
+            base_query = base_query.where(Project.owner == owner)
+            count_query = count_query.where(Project.owner == owner)
         if status:
             base_query = base_query.where(Project.status == status)
             count_query = count_query.where(Project.status == status)
@@ -47,17 +51,20 @@ class ProjectService:
         items = self._session.scalars(items_query).all()
         return items, total
 
-    def get_project(self, project_id_or_slug: str) -> Project:
+    def get_project(self, project_id_or_slug: str, owner: str | None = None) -> Project:
         stmt = select(Project).where(
             (Project.id == project_id_or_slug) | (Project.slug == project_id_or_slug)
         )
+        if owner:
+            stmt = stmt.where(Project.owner == owner)
         project = self._session.scalar(stmt)
         if not project:
             raise NotFoundError(f"Project '{project_id_or_slug}' not found")
         return project
 
-    def create_project(self, data: ProjectCreate) -> Project:
+    def create_project(self, data: ProjectCreate, owner: str = "default") -> Project:
         slug = data.slug or generate_slug(data.name)
+        project_owner = data.owner or owner
         # Check if slug exists
         existing = self._session.scalar(select(Project).where(Project.slug == slug))
         if existing:
@@ -78,6 +85,7 @@ class ProjectService:
             id=str(uuid.uuid4()),
             name=data.name,
             slug=slug,
+            owner=project_owner,
             description=data.description,
             category=data.category,
             status="active",
@@ -96,8 +104,13 @@ class ProjectService:
                 raise ConflictError(f"Project with slug '{slug}' already exists") from exc
             raise
 
-    def update_project(self, project_id_or_slug: str, data: ProjectUpdate) -> Project:
-        project = self.get_project(project_id_or_slug)
+    def update_project(
+        self,
+        project_id_or_slug: str,
+        data: ProjectUpdate,
+        owner: str | None = None,
+    ) -> Project:
+        project = self.get_project(project_id_or_slug, owner=owner)
         if data.name is not None:
             project.name = data.name
         if data.description is not None:
@@ -122,8 +135,8 @@ class ProjectService:
                 raise ConflictError(f"Project with slug '{project.slug}' already exists") from exc
             raise
 
-    def delete_project(self, project_id_or_slug: str) -> None:
-        project = self.get_project(project_id_or_slug)
+    def delete_project(self, project_id_or_slug: str, owner: str | None = None) -> None:
+        project = self.get_project(project_id_or_slug, owner=owner)
         try:
             self._session.delete(project)
             self._session.commit()

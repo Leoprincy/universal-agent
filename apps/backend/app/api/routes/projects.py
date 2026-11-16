@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.dependencies import get_project_service
+from app.api.dependencies import AuthIdentity, get_current_identity, get_project_service
 from app.schemas.project import (
     ProjectCategory,
     ProjectCreate,
@@ -19,6 +19,7 @@ def _to_response(project) -> ProjectResponse:
         id=project.id,
         name=project.name,
         slug=project.slug,
+        owner=getattr(project, "owner", "default"),
         description=project.description,
         category=project.category,
         status=project.status,
@@ -35,11 +36,13 @@ def list_projects(
     category: ProjectCategory | None = Query(None, description="Filter by category"),
     limit: int = Query(50, ge=1, le=200, description="Maximum number of items to return"),
     offset: int = Query(0, ge=0, description="Number of items to skip"),
+    identity: AuthIdentity = Depends(get_current_identity),
     service: ProjectService = Depends(get_project_service),
 ) -> ProjectListResponse:
     items, total = service.list_projects(
         status=status,
         category=category,
+        owner=identity.owner,
         limit=limit,
         offset=offset,
     )
@@ -59,9 +62,10 @@ def list_projects(
 )
 def create_project(
     data: ProjectCreate,
+    identity: AuthIdentity = Depends(get_current_identity),
     service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    project = service.create_project(data)
+    project = service.create_project(data, owner=identity.owner)
     return _to_response(project)
 
 
@@ -72,9 +76,10 @@ def create_project(
 )
 def get_project(
     project_id_or_slug: str,
+    identity: AuthIdentity = Depends(get_current_identity),
     service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    project = service.get_project(project_id_or_slug)
+    project = service.get_project(project_id_or_slug, owner=identity.owner)
     return _to_response(project)
 
 
@@ -86,9 +91,10 @@ def get_project(
 def update_project(
     project_id_or_slug: str,
     data: ProjectUpdate,
+    identity: AuthIdentity = Depends(get_current_identity),
     service: ProjectService = Depends(get_project_service),
 ) -> ProjectResponse:
-    project = service.update_project(project_id_or_slug, data)
+    project = service.update_project(project_id_or_slug, data, owner=identity.owner)
     return _to_response(project)
 
 
@@ -99,7 +105,8 @@ def update_project(
 )
 def delete_project(
     project_id_or_slug: str,
+    identity: AuthIdentity = Depends(get_current_identity),
     service: ProjectService = Depends(get_project_service),
 ) -> Response:
-    service.delete_project(project_id_or_slug)
+    service.delete_project(project_id_or_slug, owner=identity.owner)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

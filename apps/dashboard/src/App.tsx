@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   Activity,
+  AlertCircle,
   ArrowDownRight,
   ArrowUpRight,
+  Calendar,
   ChevronDown,
   CircleHelp,
   Command,
@@ -10,14 +12,17 @@ import {
   ExternalLink,
   LayoutDashboard,
   LoaderCircle,
+  Pencil,
   Plus,
   Radio,
   RefreshCw,
+  Search,
   Server,
   Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
+  User,
   WifiOff,
   X,
   type LucideIcon,
@@ -29,6 +34,7 @@ import {
   getHealth,
   getSystemInfo,
   listProjects,
+  updateProject,
 } from "./lib/api";
 import type {
   ComponentHealth,
@@ -36,6 +42,8 @@ import type {
   Project,
   ProjectCategory,
   ProjectCreateInput,
+  ProjectStatus,
+  ProjectUpdateInput,
   SystemInfo,
 } from "./types";
 
@@ -56,14 +64,20 @@ function App() {
   const [connection, setConnection] = useState<Connection>({ state: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [loadingProjects, setLoadingProjects] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<string | null>(null);
 
   const fetchProjects = useCallback(async () => {
+    setLoadingProjects(true);
     try {
       const result = await listProjects();
       setProjects(result.items);
-    } catch {
-      // Projects list is non-critical; leave stale data in place
+      setErrorBanner(null);
+    } catch (err) {
+      setErrorBanner(err instanceof Error ? err.message : "Failed to load projects");
+    } finally {
+      setLoadingProjects(false);
     }
   }, []);
 
@@ -90,6 +104,10 @@ function App() {
     const interval = window.setInterval(() => void refresh(), 30_000);
     return () => window.clearInterval(interval);
   }, [refresh]);
+
+  const handleProjectUpdated = (updated: Project) => {
+    setProjects((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+  };
 
   const title = page === "Agent Activity" ? "Agent activity" : page;
 
@@ -164,6 +182,18 @@ function App() {
         </header>
 
         <div className="page-content">
+          {errorBanner && (
+            <div className="workspace-alert" role="alert">
+              <div className="flex items-center gap-2">
+                <AlertCircle size={16} />
+                <span>{errorBanner}</span>
+              </div>
+              <button className="icon-button" onClick={() => setErrorBanner(null)} aria-label="Dismiss error">
+                <X size={14} />
+              </button>
+            </div>
+          )}
+
           {page === "Overview" && (
             <Overview
               connection={connection}
@@ -176,11 +206,14 @@ function App() {
           {page === "Projects" && (
             <ProjectsPage
               projects={projects}
+              loading={loadingProjects}
               modalOpen={modalOpen}
               onOpenModal={() => setModalOpen(true)}
               onCloseModal={() => setModalOpen(false)}
               onProjectCreated={(p) => { setProjects((prev) => [p, ...prev]); setModalOpen(false); }}
+              onProjectUpdated={handleProjectUpdated}
               onProjectDeleted={(id) => setProjects((prev) => prev.filter((p) => p.id !== id))}
+              onError={(msg) => setErrorBanner(msg)}
             />
           )}
           {page === "Agent Activity" && <EmptyPage kind="activity" />}
@@ -313,30 +346,66 @@ function Overview({
 
 // ─── Projects page ────────────────────────────────────────────────────────────
 
+const CATEGORY_OPTIONS: { value: ProjectCategory; label: string }[] = [
+  { value: "mobile_app", label: "Mobile app" },
+  { value: "web_app", label: "Web app" },
+  { value: "saas", label: "SaaS" },
+  { value: "ecommerce", label: "E-commerce" },
+  { value: "other", label: "Other" },
+];
+
 function ProjectsPage({
   projects,
+  loading,
   modalOpen,
   onOpenModal,
   onCloseModal,
   onProjectCreated,
+  onProjectUpdated,
   onProjectDeleted,
+  onError,
 }: {
   projects: Project[];
+  loading: boolean;
   modalOpen: boolean;
   onOpenModal: () => void;
   onCloseModal: () => void;
   onProjectCreated: (p: Project) => void;
+  onProjectUpdated: (p: Project) => void;
   onProjectDeleted: (id: string) => void;
+  onError: (msg: string) => void;
 }) {
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+
   const handleDelete = async (p: Project) => {
     if (!window.confirm(`Delete "${p.name}"? This cannot be undone.`)) return;
     try {
       await deleteProject(p.id);
       onProjectDeleted(p.id);
+      if (selectedProject?.id === p.id) {
+        setSelectedProject(null);
+      }
     } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to delete project.");
+      onError(err instanceof Error ? err.message : "Failed to delete project.");
     }
   };
+
+  const filteredProjects = projects.filter((p) => {
+    if (statusFilter !== "all" && p.status !== statusFilter) return false;
+    if (categoryFilter !== "all" && p.category !== categoryFilter) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchName = p.name.toLowerCase().includes(q);
+      const matchSlug = p.slug.toLowerCase().includes(q);
+      const matchDesc = p.description?.toLowerCase().includes(q) ?? false;
+      if (!matchName && !matchSlug && !matchDesc) return false;
+    }
+    return true;
+  });
 
   return (
     <div className="empty-page-wrap">
@@ -349,7 +418,55 @@ function ProjectsPage({
         <button className="button button-primary" onClick={onOpenModal}><Plus size={15} /> New project</button>
       </div>
 
-      {projects.length === 0 ? (
+      {projects.length > 0 && (
+        <div className="workspace-filter-bar">
+          <div className="filter-left-group">
+            <div className="search-input-wrap">
+              <Search size={14} />
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Search projects..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                aria-label="Search projects"
+              />
+            </div>
+
+            <div className="filter-pills" role="tablist" aria-label="Status filter">
+              {["all", "active", "paused", "archived"].map((st) => (
+                <button
+                  key={st}
+                  className={`filter-pill ${statusFilter === st ? "active" : ""}`}
+                  onClick={() => setStatusFilter(st)}
+                  type="button"
+                >
+                  {st.charAt(0).toUpperCase() + st.slice(1)}
+                </button>
+              ))}
+            </div>
+
+            <select
+              className="category-select"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+              aria-label="Category filter"
+            >
+              <option value="all">All categories</option>
+              {CATEGORY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>{c.label}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="workspace-loading">
+          <LoaderCircle size={24} className="spin text-blue-500" />
+          <span>Loading workspace projects...</span>
+        </div>
+      ) : projects.length === 0 ? (
         <section className="empty-page panel">
           <div className="empty-page-icon"><Command size={22} strokeWidth={1.6} /></div>
           <span className="panel-kicker">PROJECT WORKSPACE</span>
@@ -357,10 +474,29 @@ function ProjectsPage({
           <p>There are no projects in this workspace. Add a product when you're ready to start organizing growth work.</p>
           <button className="button button-primary" style={{ marginTop: "1.25rem" }} onClick={onOpenModal}><Plus size={15} /> Add your first project</button>
         </section>
+      ) : filteredProjects.length === 0 ? (
+        <section className="empty-page panel" style={{ padding: "3rem 1rem" }}>
+          <div className="empty-page-icon"><Search size={22} strokeWidth={1.6} /></div>
+          <h2>No matching projects</h2>
+          <p>No projects match your current filters or search term.</p>
+          <button
+            className="button button-secondary"
+            style={{ marginTop: "1rem" }}
+            onClick={() => { setStatusFilter("all"); setCategoryFilter("all"); setSearchQuery(""); }}
+          >
+            Clear filters
+          </button>
+        </section>
       ) : (
         <div className="projects-grid">
-          {projects.map((p) => (
-            <ProjectCard key={p.id} project={p} onDelete={() => void handleDelete(p)} />
+          {filteredProjects.map((p) => (
+            <ProjectCard
+              key={p.id}
+              project={p}
+              onSelect={() => setSelectedProject(p)}
+              onEdit={() => setEditingProject(p)}
+              onDelete={() => void handleDelete(p)}
+            />
           ))}
         </div>
       )}
@@ -368,40 +504,315 @@ function ProjectsPage({
       {modalOpen && (
         <CreateProjectModal onClose={onCloseModal} onCreated={onProjectCreated} />
       )}
+
+      {selectedProject && (
+        <ProjectDetailModal
+          project={selectedProject}
+          onClose={() => setSelectedProject(null)}
+          onEdit={() => {
+            setEditingProject(selectedProject);
+            setSelectedProject(null);
+          }}
+          onDelete={() => void handleDelete(selectedProject)}
+        />
+      )}
+
+      {editingProject && (
+        <EditProjectModal
+          project={editingProject}
+          onClose={() => setEditingProject(null)}
+          onUpdated={(updated) => {
+            onProjectUpdated(updated);
+            setEditingProject(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ProjectCard({ project, onDelete }: { project: Project; onDelete: () => void }) {
+function ProjectCard({
+  project,
+  onSelect,
+  onEdit,
+  onDelete,
+}: {
+  project: Project;
+  onSelect: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
   return (
-    <article className="project-card panel">
+    <article
+      className="project-card panel"
+      onClick={onSelect}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+    >
       <div className="project-card-header">
         <div>
           <div className="project-card-name">{project.name}</div>
           <div className="project-card-slug">/{project.slug}</div>
         </div>
-        <button className="icon-button danger" onClick={onDelete} aria-label={`Delete ${project.name}`} title="Delete project">
-          <Trash2 size={15} />
-        </button>
+        <div className="project-card-actions">
+          <button
+            className="icon-button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit();
+            }}
+            aria-label={`Edit ${project.name}`}
+            title="Edit project"
+          >
+            <Pencil size={14} />
+          </button>
+          <button
+            className="icon-button danger"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            aria-label={`Delete ${project.name}`}
+            title="Delete project"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
       </div>
       {project.description && <p className="project-card-desc">{project.description}</p>}
       <div className="project-card-footer">
-        <span className={`badge badge-category`}>{project.category.replace("_", " ")}</span>
+        <span className="badge badge-category">{project.category.replace("_", " ")}</span>
         <span className={`badge badge-${project.status}`}>{project.status}</span>
       </div>
     </article>
   );
 }
 
-// ─── Create project modal ─────────────────────────────────────────────────────
+// ─── Project detail modal ─────────────────────────────────────────────────────
 
-const CATEGORY_OPTIONS: { value: ProjectCategory; label: string }[] = [
-  { value: "mobile_app", label: "Mobile app" },
-  { value: "web_app", label: "Web app" },
-  { value: "saas", label: "SaaS" },
-  { value: "ecommerce", label: "E-commerce" },
-  { value: "other", label: "Other" },
-];
+function ProjectDetailModal({
+  project,
+  onClose,
+  onEdit,
+  onDelete,
+}: {
+  project: Project;
+  onClose: () => void;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Project details" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-dialog large">
+        <div className="modal-header">
+          <div>
+            <h2>{project.name}</h2>
+            <div className="detail-header-tags">
+              <span className="project-card-slug">/{project.slug}</span>
+              <span className={`badge badge-${project.status}`}>{project.status}</span>
+              <span className="badge badge-category">{project.category.replace("_", " ")}</span>
+            </div>
+          </div>
+          <button className="icon-button" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
+        </div>
+
+        <div className="detail-section">
+          <div className="detail-section-title">Overview</div>
+          <div className="detail-grid">
+            <div className="detail-item">
+              <span className="label">Project ID</span>
+              <span className="value font-mono text-xs text-slate-400">{project.id}</span>
+            </div>
+            <div className="detail-item">
+              <span className="label">Owner / Workspace</span>
+              <span className="value flex items-center gap-1.5"><User size={13} className="text-slate-400" />{project.owner ?? "default"}</span>
+            </div>
+            <div className="detail-item">
+              <span className="label">Created</span>
+              <span className="value flex items-center gap-1.5"><Calendar size={13} className="text-slate-400" />{new Date(project.created_at).toLocaleDateString()}</span>
+            </div>
+            <div className="detail-item">
+              <span className="label">Last updated</span>
+              <span className="value flex items-center gap-1.5"><Calendar size={13} className="text-slate-400" />{new Date(project.updated_at).toLocaleDateString()}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <div className="detail-section-title">Description</div>
+          <div className="detail-desc-box">
+            {project.description || <span className="italic text-slate-500">No description provided for this product.</span>}
+          </div>
+        </div>
+
+        <div className="detail-section">
+          <div className="detail-section-title">Target Audience</div>
+          <div className="detail-desc-box">
+            {project.target_audience || <span className="italic text-slate-500">No target audience specified.</span>}
+          </div>
+        </div>
+
+        {project.metadata && Object.keys(project.metadata).length > 0 && (
+          <div className="detail-section">
+            <div className="detail-section-title">Product Metadata</div>
+            <pre className="metadata-box">{JSON.stringify(project.metadata, null, 2)}</pre>
+          </div>
+        )}
+
+        <div className="modal-actions" style={{ marginTop: "24px" }}>
+          <button type="button" className="button button-danger" onClick={onDelete}>
+            <Trash2 size={14} /> Delete product
+          </button>
+          <div className="flex items-center gap-2">
+            <button type="button" className="button button-secondary" onClick={onClose}>Close</button>
+            <button type="button" className="button button-primary" onClick={onEdit}>
+              <Pencil size={14} /> Edit product
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Edit project modal ───────────────────────────────────────────────────────
+
+function EditProjectModal({
+  project,
+  onClose,
+  onUpdated,
+}: {
+  project: Project;
+  onClose: () => void;
+  onUpdated: (p: Project) => void;
+}) {
+  const [name, setName] = useState(project.name);
+  const [category, setCategory] = useState<ProjectCategory>(project.category);
+  const [status, setStatus] = useState<ProjectStatus>(project.status);
+  const [description, setDescription] = useState(project.description ?? "");
+  const [targetAudience, setTargetAudience] = useState(project.target_audience ?? "");
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (!name.trim()) {
+      setError("Project name is required.");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const payload: ProjectUpdateInput = {
+        name: name.trim(),
+        category,
+        status,
+        description: description.trim() || undefined,
+        target_audience: targetAudience.trim() || undefined,
+      };
+      const updated = await updateProject(project.id, payload);
+      onUpdated(updated);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update project.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="Edit project" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal-dialog">
+        <div className="modal-header">
+          <h2>Edit project</h2>
+          <button className="icon-button" onClick={onClose} aria-label="Close modal"><X size={18} /></button>
+        </div>
+
+        <form onSubmit={(e) => void handleSubmit(e)} className="modal-form">
+          <div className="form-field">
+            <label className="form-label" htmlFor="edit-name">Project name *</label>
+            <input
+              id="edit-name"
+              className="form-input"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="form-field">
+              <label className="form-label" htmlFor="edit-category">Category</label>
+              <select
+                id="edit-category"
+                className="form-select"
+                value={category}
+                onChange={(e) => setCategory(e.target.value as ProjectCategory)}
+              >
+                {CATEGORY_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="form-field">
+              <label className="form-label" htmlFor="edit-status">Status</label>
+              <select
+                id="edit-status"
+                className="form-select"
+                value={status}
+                onChange={(e) => setStatus(e.target.value as ProjectStatus)}
+              >
+                <option value="active">Active</option>
+                <option value="paused">Paused</option>
+                <option value="archived">Archived</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="form-field">
+            <label className="form-label" htmlFor="edit-desc">Description</label>
+            <textarea
+              id="edit-desc"
+              className="form-textarea"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+            />
+          </div>
+
+          <div className="form-field">
+            <label className="form-label" htmlFor="edit-audience">Target audience</label>
+            <textarea
+              id="edit-audience"
+              className="form-textarea"
+              value={targetAudience}
+              onChange={(e) => setTargetAudience(e.target.value)}
+              rows={2}
+            />
+          </div>
+
+          {error && <div className="form-error">{error}</div>}
+
+          <div className="modal-actions">
+            <button type="button" className="button button-secondary" onClick={onClose} disabled={submitting}>Cancel</button>
+            <button type="submit" className="button button-primary" disabled={submitting}>
+              {submitting ? <><LoaderCircle size={14} className="spin" /> Saving…</> : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// ─── Create project modal ─────────────────────────────────────────────────────
 
 function CreateProjectModal({
   onClose,

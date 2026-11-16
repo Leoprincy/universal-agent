@@ -17,6 +17,7 @@ class ProjectBase(BaseModel):
 
 class ProjectCreate(ProjectBase):
     slug: str | None = Field(default=None, max_length=140)
+    owner: str | None = Field(default=None, max_length=100)
 
     @field_validator("slug")
     @classmethod
@@ -40,6 +41,7 @@ class ProjectResponse(ProjectBase):
 
     id: str
     slug: str
+    owner: str = "default"
     status: ProjectStatus
     created_at: datetime
     updated_at: datetime

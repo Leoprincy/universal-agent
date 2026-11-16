@@ -33,6 +33,11 @@ This response deliberately excludes environment variables, connection strings, a
 
 Returns the paginated list of growth projects in this workspace.
 
+Authentication:
+- Optional in default self-hosted mode (uses default workspace owner).
+- When `UGA_API_KEY` is configured in backend environment: requires `Authorization: Bearer <key>` or `X-API-Key: <key>`. Missing or invalid keys return HTTP 401 Unauthorized.
+- Optional `X-Workspace-Owner` header can be used to scope requests to a specific workspace owner.
+
 Query parameters:
 - `limit` (optional integer, default `50`, maximum `200`): Maximum items to return.
 - `offset` (optional integer, default `0`, minimum `0`): Number of items to skip.
@@ -46,6 +51,7 @@ Query parameters:
       "id": "7b8e1e72-1c23-4d56-8e9a-0b1c2d3e4f5a",
       "name": "Android Part-Time Jobs App",
       "slug": "android-part-time-jobs-app",
+      "owner": "default",
       "description": "Mobile app connecting students with local part-time opportunities.",
       "category": "mobile_app",
       "status": "active",
@@ -76,3 +82,25 @@ Request body:
   "metadata": { "platform": "Android" }
 }
 ```
+
+## `GET /api/v1/projects/{id_or_slug}`
+
+Returns a single growth project by UUID or unique slug. Returns HTTP 404 Not Found if missing or not belonging to the caller's workspace.
+
+## `PATCH /api/v1/projects/{id_or_slug}`
+
+Updates an existing growth project. All fields in request body are optional. Returns HTTP 200 OK with the updated record.
+
+Request body example:
+```json
+{
+  "name": "Android Part-Time Jobs Platform",
+  "status": "paused",
+  "category": "mobile_app",
+  "description": "Updated platform description"
+}
+```
+
+## `DELETE /api/v1/projects/{id_or_slug}`
+
+Deletes a growth project. Returns HTTP 204 No Content.

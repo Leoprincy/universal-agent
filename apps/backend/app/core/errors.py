@@ -17,3 +17,13 @@ class NotFoundError(ApplicationError):
 class ConflictError(ApplicationError):
     code = "conflict"
     status_code = 409
+
+
+class UnauthorizedError(ApplicationError):
+    code = "unauthorized"
+    status_code = 401
+
+
+class ForbiddenError(ApplicationError):
+    code = "forbidden"
+    status_code = 403

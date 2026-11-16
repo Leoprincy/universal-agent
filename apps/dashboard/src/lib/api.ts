@@ -3,6 +3,7 @@ import type {
   Project,
   ProjectCreateInput,
   ProjectListResponse,
+  ProjectUpdateInput,
   SystemInfo,
 } from "../types";
 
@@ -47,6 +48,27 @@ export function listProjects(options?: ListProjectsOptions): Promise<ProjectList
 export async function createProject(data: ProjectCreateInput): Promise<Project> {
   const response = await fetch(`${apiBaseUrl}/api/v1/projects`, {
     method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(data),
+  });
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => null);
+    const msg = errorBody?.error?.message ?? `Backend returned HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+  return (await response.json()) as Project;
+}
+
+export function getProject(idOrSlug: string): Promise<Project> {
+  return getJson<Project>(`/api/v1/projects/${idOrSlug}`);
+}
+
+export async function updateProject(idOrSlug: string, data: ProjectUpdateInput): Promise<Project> {
+  const response = await fetch(`${apiBaseUrl}/api/v1/projects/${idOrSlug}`, {
+    method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       Accept: "application/json",

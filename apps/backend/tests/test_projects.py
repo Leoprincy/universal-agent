@@ -178,3 +178,31 @@ def test_slug_generation_bounded_collision(db_session):
     p2 = service.create_project(ProjectCreate(name="Test Item"))
     assert p1.slug == "test-item"
     assert p2.slug == "test-item-1"
+
+
+def test_project_owner_isolation(db_session):
+    service = ProjectService(db_session)
+    p_team_a = service.create_project(ProjectCreate(name="Team A App"), owner="team-a")
+    p_team_b = service.create_project(ProjectCreate(name="Team B App"), owner="team-b")
+
+    # Team A list only sees Team A
+    items_a, total_a = service.list_projects(owner="team-a")
+    assert total_a == 1
+    assert items_a[0].id == p_team_a.id
+
+    # Team B list only sees Team B
+    items_b, total_b = service.list_projects(owner="team-b")
+    assert total_b == 1
+    assert items_b[0].id == p_team_b.id
+
+    # Team B cannot fetch Team A's project
+    with pytest.raises(NotFoundError):
+        service.get_project(p_team_a.id, owner="team-b")
+
+    # Team B cannot update Team A's project
+    with pytest.raises(NotFoundError):
+        service.update_project(p_team_a.id, ProjectUpdate(name="Hacked"), owner="team-b")
+
+    # Team B cannot delete Team A's project
+    with pytest.raises(NotFoundError):
+        service.delete_project(p_team_a.id, owner="team-b")

@@ -25,6 +25,7 @@ export interface Project {
   id: string;
   name: string;
   slug: string;
+  owner?: string;
   description?: string | null;
   category: ProjectCategory;
   status: ProjectStatus;
@@ -46,6 +47,15 @@ export interface ProjectCreateInput {
   slug?: string;
   description?: string;
   category: ProjectCategory;
+  target_audience?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ProjectUpdateInput {
+  name?: string;
+  description?: string;
+  category?: ProjectCategory;
+  status?: ProjectStatus;
   target_audience?: string;
   metadata?: Record<string, unknown>;
 }

@@ -21,6 +21,13 @@ class Project(Base):
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     category: Mapped[str] = mapped_column(String(50), nullable=False, default="other")
     status: Mapped[str] = mapped_column(String(30), nullable=False, default="active")
+    owner: Mapped[str] = mapped_column(
+        String(100),
+        nullable=False,
+        default="default",
+        server_default="default",
+        index=True,
+    )
     target_audience: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column("metadata", JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(

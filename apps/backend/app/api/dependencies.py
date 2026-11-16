@@ -1,10 +1,44 @@
+from dataclasses import dataclass
 from typing import Generator
-from fastapi import Depends, Request
+from fastapi import Depends, Header, Request
 from sqlalchemy.orm import Session
 
+from app.core.errors import UnauthorizedError
 from app.database.connection import DatabaseConnection
 from app.services.health import HealthService
 from app.services.project import ProjectService
+
+
+@dataclass
+class AuthIdentity:
+    owner: str = "default"
+    authenticated: bool = False
+
+
+def get_current_identity(
+    request: Request,
+    authorization: str | None = Header(None),
+    x_api_key: str | None = Header(None),
+    x_workspace_owner: str | None = Header(None),
+) -> AuthIdentity:
+    settings = request.app.state.settings
+    configured_key = settings.api_key.get_secret_value() if settings.api_key else None
+
+    if configured_key:
+        provided_key = None
+        if authorization and authorization.lower().startswith("bearer "):
+            provided_key = authorization[7:].strip()
+        elif x_api_key:
+            provided_key = x_api_key.strip()
+
+        if not provided_key or provided_key != configured_key:
+            raise UnauthorizedError("Invalid or missing API key")
+
+        owner = x_workspace_owner.strip() if x_workspace_owner else settings.workspace_owner
+        return AuthIdentity(owner=owner, authenticated=True)
+
+    owner = x_workspace_owner.strip() if x_workspace_owner else settings.workspace_owner
+    return AuthIdentity(owner=owner, authenticated=False)
 
 
 def get_health_service(request: Request) -> HealthService:

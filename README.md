@@ -121,15 +121,22 @@ Useful local URLs:
 - System metadata: `http://localhost:8000/api/v1/system/info`
 - Interactive API docs: `http://localhost:8000/docs`
 
-### Project management API
+### Project management API and Product Workspace
 
 The `/api/v1/projects` endpoints manage products and growth workspaces:
 
 - `GET /api/v1/projects` — Paginated list with `limit` (default 50, max 200), `offset`, `status`, and `category` filters.
 - `POST /api/v1/projects` — Create project with auto-slug generation, collision handling, and validation.
 - `GET /api/v1/projects/{id_or_slug}` — Retrieve project by UUID or unique slug.
-- `PATCH /api/v1/projects/{id_or_slug}` — Update project attributes.
+- `PATCH /api/v1/projects/{id_or_slug}` — Update project attributes (name, category, status, description, target audience, metadata).
 - `DELETE /api/v1/projects/{id_or_slug}` — Delete project (returns 204 No Content).
+
+### Authorization & Security Boundaries
+
+UGA supports deployment-appropriate authorization:
+- **Default Local Mode**: Zero-configuration local development associating operations with the default workspace (`UGA_WORKSPACE_OWNER=default`).
+- **API Key Guard**: Setting `UGA_API_KEY` enforces bearer token (`Authorization: Bearer <key>`) or header (`X-API-Key: <key>`) verification across all endpoints. Missing or invalid keys return HTTP 401 Unauthorized.
+- **Workspace Isolation**: Optional `X-Workspace-Owner` header scopes project operations to specific workspaces, preventing cross-workspace data access.
 
 Stop local infrastructure with `docker compose down`. Named volumes keep the database and Redis data between runs.
 

@@ -220,3 +220,100 @@ def test_project_api_conflict_and_missing_handling(test_app):
                 assert r_del.json()["error"]["code"] == "not_found"
 
     asyncio.run(run())
+
+
+def test_project_api_workspace_isolation(test_app):
+    async def run():
+        async with test_app.router.lifespan_context(test_app):
+            async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+                # Team 1 creates a project
+                r1 = await client.post(
+                    "/api/v1/projects",
+                    json={"name": "Team 1 Secret App"},
+                    headers={"X-Workspace-Owner": "team-1"},
+                )
+                assert r1.status_code == 201
+                p1_id = r1.json()["id"]
+                assert r1.json()["owner"] == "team-1"
+
+                # Team 2 creates a project
+                r2 = await client.post(
+                    "/api/v1/projects",
+                    json={"name": "Team 2 Secret App"},
+                    headers={"X-Workspace-Owner": "team-2"},
+                )
+                assert r2.status_code == 201
+                assert r2.json()["owner"] == "team-2"
+
+                # Team 2 lists projects -> should only see Team 2's app
+                r2_list = await client.get("/api/v1/projects", headers={"X-Workspace-Owner": "team-2"})
+                assert r2_list.status_code == 200
+                items2 = r2_list.json()["items"]
+                assert len(items2) == 1
+                assert items2[0]["name"] == "Team 2 Secret App"
+
+                # Team 2 tries to GET Team 1's app -> 404 Not Found
+                r_cross_get = await client.get(
+                    f"/api/v1/projects/{p1_id}",
+                    headers={"X-Workspace-Owner": "team-2"},
+                )
+                assert r_cross_get.status_code == 404
+
+                # Team 2 tries to PATCH Team 1's app -> 404 Not Found
+                r_cross_patch = await client.patch(
+                    f"/api/v1/projects/{p1_id}",
+                    json={"name": "Compromised"},
+                    headers={"X-Workspace-Owner": "team-2"},
+                )
+                assert r_cross_patch.status_code == 404
+
+                # Team 2 tries to DELETE Team 1's app -> 404 Not Found
+                r_cross_del = await client.delete(
+                    f"/api/v1/projects/{p1_id}",
+                    headers={"X-Workspace-Owner": "team-2"},
+                )
+                assert r_cross_del.status_code == 404
+
+    asyncio.run(run())
+
+
+def test_project_api_key_authorization(test_app):
+    from pydantic import SecretStr
+
+    # Configure API key on the app's settings
+    test_app.state.settings.api_key = SecretStr("secure-test-token-1234")
+
+    async def run():
+        async with test_app.router.lifespan_context(test_app):
+            async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+                # 1. No key -> 401
+                r_no_auth = await client.get("/api/v1/projects")
+                assert r_no_auth.status_code == 401
+                assert r_no_auth.json()["error"]["code"] == "unauthorized"
+
+                # 2. Wrong key -> 401
+                r_wrong = await client.get(
+                    "/api/v1/projects",
+                    headers={"Authorization": "Bearer wrong-key"},
+                )
+                assert r_wrong.status_code == 401
+                assert r_wrong.json()["error"]["code"] == "unauthorized"
+
+                # 3. Valid Bearer token -> 200
+                r_bearer = await client.get(
+                    "/api/v1/projects",
+                    headers={"Authorization": "Bearer secure-test-token-1234"},
+                )
+                assert r_bearer.status_code == 200
+
+                # 4. Valid X-API-Key header -> 200
+                r_xkey = await client.get(
+                    "/api/v1/projects",
+                    headers={"X-API-Key": "secure-test-token-1234"},
+                )
+                assert r_xkey.status_code == 200
+
+    try:
+        asyncio.run(run())
+    finally:
+        test_app.state.settings.api_key = None
