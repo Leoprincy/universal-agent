@@ -1,0 +1,1 @@
+"""Replaceable infrastructure connectivity adapters."""
