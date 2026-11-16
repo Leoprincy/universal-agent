@@ -33,11 +33,22 @@ def _to_response(project) -> ProjectResponse:
 def list_projects(
     status: ProjectStatus | None = Query(None, description="Filter by status"),
     category: ProjectCategory | None = Query(None, description="Filter by category"),
+    limit: int = Query(50, ge=1, le=200, description="Maximum number of items to return"),
+    offset: int = Query(0, ge=0, description="Number of items to skip"),
     service: ProjectService = Depends(get_project_service),
 ) -> ProjectListResponse:
-    projects = service.list_projects(status=status, category=category)
-    items = [_to_response(p) for p in projects]
-    return ProjectListResponse(items=items, total=len(items))
+    items, total = service.list_projects(
+        status=status,
+        category=category,
+        limit=limit,
+        offset=offset,
+    )
+    return ProjectListResponse(
+        items=[_to_response(p) for p in items],
+        total=total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @router.post(

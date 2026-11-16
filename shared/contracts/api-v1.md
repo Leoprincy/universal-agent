@@ -31,7 +31,13 @@ This response deliberately excludes environment variables, connection strings, a
 
 ## `GET /api/v1/projects`
 
-Returns the list of growth projects in this workspace.
+Returns the paginated list of growth projects in this workspace.
+
+Query parameters:
+- `limit` (optional integer, default `50`, maximum `200`): Maximum items to return.
+- `offset` (optional integer, default `0`, minimum `0`): Number of items to skip.
+- `status` (optional string): Filter by status (`active`, `paused`, `archived`).
+- `category` (optional string): Filter by category (`mobile_app`, `web_app`, `saas`, `ecommerce`, `other`).
 
 ```json
 {
@@ -49,13 +55,15 @@ Returns the list of growth projects in this workspace.
       "updated_at": "2026-11-16T12:00:00Z"
     }
   ],
-  "total": 1
+  "total": 1,
+  "limit": 50,
+  "offset": 0
 }
 ```
 
 ## `POST /api/v1/projects`
 
-Creates a new growth project. Returns HTTP 201 Created.
+Creates a new growth project. Returns HTTP 201 Created on success, or HTTP 409 Conflict if a project with the requested slug already exists.
 
 Request body:
 ```json

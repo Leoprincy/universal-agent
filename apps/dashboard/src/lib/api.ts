@@ -27,8 +27,21 @@ export function getSystemInfo(): Promise<SystemInfo> {
   return getJson<SystemInfo>("/api/v1/system/info");
 }
 
-export function listProjects(): Promise<ProjectListResponse> {
-  return getJson<ProjectListResponse>("/api/v1/projects");
+export interface ListProjectsOptions {
+  limit?: number;
+  offset?: number;
+  status?: string;
+  category?: string;
+}
+
+export function listProjects(options?: ListProjectsOptions): Promise<ProjectListResponse> {
+  const params = new URLSearchParams();
+  if (options?.limit !== undefined) params.set("limit", String(options.limit));
+  if (options?.offset !== undefined) params.set("offset", String(options.offset));
+  if (options?.status) params.set("status", options.status);
+  if (options?.category) params.set("category", options.category);
+  const qs = params.toString();
+  return getJson<ProjectListResponse>(`/api/v1/projects${qs ? `?${qs}` : ""}`);
 }
 
 export async function createProject(data: ProjectCreateInput): Promise<Project> {

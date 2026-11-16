@@ -1,6 +1,6 @@
 # Universal Autonomous Growth Agent
 
-A self-hosted foundation for a modular growth platform. This initial project provides a FastAPI backend, a React dashboard, and local PostgreSQL and Redis infrastructure. It does not yet include project management, campaign execution, AI providers, or background jobs.
+A self-hosted foundation and project workspace for a modular growth platform. The current implementation provides a FastAPI backend, a React dashboard, local PostgreSQL and Redis infrastructure, and full project management capabilities (SQLAlchemy domain model, Alembic migrations, paginated CRUD APIs, and dashboard integration). It does not yet include campaign execution, AI providers, or background task queues (planned for future phases).
 
 ## Requirements
 
@@ -116,9 +116,20 @@ npm run build
 Useful local URLs:
 
 - Dashboard: `http://localhost:5173`
+- Projects API: `http://localhost:8000/api/v1/projects`
 - API health: `http://localhost:8000/api/v1/health`
 - System metadata: `http://localhost:8000/api/v1/system/info`
 - Interactive API docs: `http://localhost:8000/docs`
+
+### Project management API
+
+The `/api/v1/projects` endpoints manage products and growth workspaces:
+
+- `GET /api/v1/projects` — Paginated list with `limit` (default 50, max 200), `offset`, `status`, and `category` filters.
+- `POST /api/v1/projects` — Create project with auto-slug generation, collision handling, and validation.
+- `GET /api/v1/projects/{id_or_slug}` — Retrieve project by UUID or unique slug.
+- `PATCH /api/v1/projects/{id_or_slug}` — Update project attributes.
+- `DELETE /api/v1/projects/{id_or_slug}` — Delete project (returns 204 No Content).
 
 Stop local infrastructure with `docker compose down`. Named volumes keep the database and Redis data between runs.
 

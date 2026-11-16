@@ -76,12 +76,76 @@ def test_list_projects_with_filters(db_session):
     service.create_project(ProjectCreate(name="App 1", category="mobile_app"))
     service.create_project(ProjectCreate(name="App 2", category="saas"))
 
-    all_items = service.list_projects()
+    all_items, total = service.list_projects()
     assert len(all_items) == 2
+    assert total == 2
 
-    mobile_items = service.list_projects(category="mobile_app")
+    mobile_items, mobile_total = service.list_projects(category="mobile_app")
     assert len(mobile_items) == 1
+    assert mobile_total == 1
     assert mobile_items[0].name == "App 1"
+
+
+def test_list_projects_status_filtering(db_session):
+    service = ProjectService(db_session)
+    p1 = service.create_project(ProjectCreate(name="Active App"))
+    p2 = service.create_project(ProjectCreate(name="Paused App"))
+    service.update_project(p2.id, ProjectUpdate(status="paused"))
+
+    active_items, active_total = service.list_projects(status="active")
+    assert active_total == 1
+    assert active_items[0].name == "Active App"
+
+    paused_items, paused_total = service.list_projects(status="paused")
+    assert paused_total == 1
+    assert paused_items[0].name == "Paused App"
+
+
+def test_list_projects_pagination(db_session):
+    service = ProjectService(db_session)
+    for i in range(10):
+        service.create_project(ProjectCreate(name=f"Project {i:02d}"))
+
+    # First page: limit 3, offset 0
+    page1, total = service.list_projects(limit=3, offset=0)
+    assert total == 10
+    assert len(page1) == 3
+
+    # Second page: limit 3, offset 3
+    page2, total = service.list_projects(limit=3, offset=3)
+    assert total == 10
+    assert len(page2) == 3
+    # Check stable distinct pages
+    page1_ids = {p.id for p in page1}
+    page2_ids = {p.id for p in page2}
+    assert page1_ids.isdisjoint(page2_ids)
+
+    # Offset at boundary: offset 9
+    boundary_page, total = service.list_projects(limit=5, offset=9)
+    assert total == 10
+    assert len(boundary_page) == 1
+
+    # Out of range offset: offset 20
+    empty_page, total = service.list_projects(limit=5, offset=20)
+    assert total == 10
+    assert len(empty_page) == 0
+
+
+def test_list_projects_pagination_combined_with_filters(db_session):
+    service = ProjectService(db_session)
+    for i in range(5):
+        service.create_project(ProjectCreate(name=f"Mobile App {i}", category="mobile_app"))
+    for i in range(3):
+        service.create_project(ProjectCreate(name=f"SaaS App {i}", category="saas"))
+
+    items, total = service.list_projects(category="mobile_app", limit=2, offset=0)
+    assert total == 5
+    assert len(items) == 2
+    assert all(p.category == "mobile_app" for p in items)
+
+    items_p2, total_p2 = service.list_projects(category="mobile_app", limit=2, offset=2)
+    assert total_p2 == 5
+    assert len(items_p2) == 2
 
 
 def test_update_and_delete_project(db_session):
@@ -99,3 +163,18 @@ def test_update_and_delete_project(db_session):
     service.delete_project(p.id)
     with pytest.raises(NotFoundError):
         service.get_project(p.id)
+
+
+def test_update_missing_project_raises_not_found(db_session):
+    service = ProjectService(db_session)
+    with pytest.raises(NotFoundError):
+        service.update_project("non-existent-id", ProjectUpdate(name="New"))
+
+
+def test_slug_generation_bounded_collision(db_session):
+    service = ProjectService(db_session)
+    # Generate same base name multiple times
+    p1 = service.create_project(ProjectCreate(name="Test Item"))
+    p2 = service.create_project(ProjectCreate(name="Test Item"))
+    assert p1.slug == "test-item"
+    assert p2.slug == "test-item-1"

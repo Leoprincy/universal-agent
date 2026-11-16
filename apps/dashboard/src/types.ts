@@ -37,6 +37,8 @@ export interface Project {
 export interface ProjectListResponse {
   items: Project[];
   total: number;
+  limit?: number;
+  offset?: number;
 }
 
 export interface ProjectCreateInput {

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api.router import api_router
@@ -61,6 +62,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def application_error_handler(_: Request, exc: ApplicationError) -> JSONResponse:
         body = ErrorResponse(error={"code": exc.code, "message": exc.message})
         return JSONResponse(status_code=exc.status_code, content=body.model_dump())
+
+    @app.exception_handler(IntegrityError)
+    async def integrity_error_handler(_: Request, exc: IntegrityError) -> JSONResponse:
+        orig_msg = str(getattr(exc, "orig", exc)).lower()
+        if "ix_projects_slug" in orig_msg or "projects.slug" in orig_msg or ("unique" in orig_msg and "slug" in orig_msg):
+            body = ErrorResponse(
+                error={"code": "conflict", "message": "A project with this slug already exists"}
+            )
+            return JSONResponse(status_code=409, content=body.model_dump())
+        logger.exception("Database integrity error", exc_info=exc)
+        body = ErrorResponse(
+            error={"code": "conflict", "message": "Database integrity constraint violation"}
+        )
+        return JSONResponse(status_code=409, content=body.model_dump())
 
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(_: Request, exc: RequestValidationError) -> JSONResponse:
