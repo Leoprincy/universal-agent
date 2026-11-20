@@ -265,3 +265,221 @@ class OpportunityResearchAssociation(Base):
         Index("ix_assoc_research_id", "research_id"),
         Index("ix_assoc_project_id", "project_id"),
     )
+
+
+class GrowthStrategy(Base):
+    __tablename__ = "growth_strategies"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    slug: Mapped[str] = mapped_column(String(220), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    strategic_vision: Mapped[str] = mapped_column(Text, nullable=False)
+    target_audience: Mapped[str] = mapped_column(Text, nullable=False)
+    strategic_constraints: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    budget_envelope: Mapped[Optional[float]] = mapped_column(Numeric(12, 2), nullable=True)
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="USD", server_default="USD"
+    )
+    time_horizon: Mapped[str] = mapped_column(String(50), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="draft", server_default="draft"
+    )
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "metadata_json", JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("id", "project_id", name="uq_growth_strategies_id_project"),
+        UniqueConstraint("project_id", "slug", name="uq_growth_strategies_project_slug"),
+        CheckConstraint(
+            "status IN ('draft', 'in_review', 'approved', 'active', 'completed', 'archived')",
+            name="ck_growth_strategies_status",
+        ),
+        CheckConstraint(
+            "budget_envelope IS NULL OR budget_envelope >= 0.00",
+            name="ck_growth_strategies_budget",
+        ),
+        CheckConstraint(
+            "length(currency) = 3",
+            name="ck_growth_strategies_currency",
+        ),
+        Index("ix_growth_strategies_project_status", "project_id", "status"),
+        Index("ix_growth_strategies_project_time_horizon", "project_id", "time_horizon"),
+    )
+
+
+class StrategyGoal(Base):
+    __tablename__ = "strategy_goals"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    strategy_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    metric_unit: Mapped[str] = mapped_column(String(50), nullable=False)
+    baseline_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    current_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    target_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="pending", server_default="pending"
+    )
+    metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "metadata_json", JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["strategy_id", "project_id"],
+            ["growth_strategies.id", "growth_strategies.project_id"],
+            name="fk_strategy_goals_strategy_project",
+            ondelete="CASCADE",
+        ),
+        UniqueConstraint("id", "project_id", name="uq_strategy_goals_id_project"),
+        CheckConstraint(
+            "status IN ('pending', 'on_track', 'at_risk', 'behind', 'achieved', 'abandoned')",
+            name="ck_strategy_goals_status",
+        ),
+        Index("ix_strategy_goals_strategy_status", "strategy_id", "status"),
+        Index("ix_strategy_goals_project_status", "project_id", "status"),
+    )
+
+
+class StrategyOpportunityAssociation(Base):
+    __tablename__ = "strategy_opportunity_associations"
+
+    strategy_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    opportunity_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    strategic_rationale: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["strategy_id", "project_id"],
+            ["growth_strategies.id", "growth_strategies.project_id"],
+            name="fk_assoc_strat_strategy_project",
+            ondelete="CASCADE",
+        ),
+        ForeignKeyConstraint(
+            ["opportunity_id", "project_id"],
+            ["growth_opportunities.id", "growth_opportunities.project_id"],
+            name="fk_assoc_strat_opportunity_project",
+            ondelete="CASCADE",
+        ),
+        Index("ix_assoc_strat_opportunity_id", "opportunity_id"),
+        Index("ix_assoc_strat_project_id", "project_id"),
+    )
+
+
+class StrategyStatusHistory(Base):
+    __tablename__ = "strategy_status_history"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    strategy_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    previous_status: Mapped[Optional[str]] = mapped_column(String(30), nullable=True)
+    new_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    reason: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    actor: Mapped[str] = mapped_column(String(100), nullable=False)
+    system_metadata_json: Mapped[Optional[dict[str, Any]]] = mapped_column(
+        "system_metadata_json", JSON().with_variant(JSONB, "postgresql"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["strategy_id", "project_id"],
+            ["growth_strategies.id", "growth_strategies.project_id"],
+            name="fk_strat_history_strategy_project",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "new_status IN ('draft', 'in_review', 'approved', 'active', 'completed', 'archived')",
+            name="ck_strategy_history_new_status",
+        ),
+        CheckConstraint(
+            "previous_status IS NULL OR previous_status IN ('draft', 'in_review', 'approved', 'active', 'completed', 'archived')",
+            name="ck_strategy_history_previous_status",
+        ),
+        Index("ix_strategy_status_history_strat_created", "strategy_id", "created_at"),
+        Index("ix_strategy_status_history_project", "project_id", "created_at"),
+    )
+
+
+class GoalMetricUpdate(Base):
+    __tablename__ = "goal_metric_updates"
+
+    id: Mapped[str] = mapped_column(
+        String(36), primary_key=True, default=lambda: str(uuid.uuid4())
+    )
+    goal_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    project_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    previous_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    new_value: Mapped[float] = mapped_column(Numeric(14, 4), nullable=False)
+    notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    actor: Mapped[str] = mapped_column(String(100), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["goal_id", "project_id"],
+            ["strategy_goals.id", "strategy_goals.project_id"],
+            name="fk_metric_update_goal_project",
+            ondelete="RESTRICT",
+        ),
+        Index("ix_goal_metric_updates_goal_created", "goal_id", "created_at"),
+        Index("ix_goal_metric_updates_project", "project_id", "created_at"),
+    )

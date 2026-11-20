@@ -181,3 +181,135 @@ Returns the chronological immutable audit trail of all lifecycle status transiti
 ## `POST /api/v1/projects/{project_id_or_slug}/opportunities/{id_or_slug}/research`
 
 Associates one or more research records with an opportunity, along with individual contextual notes. Enforces project-level integrity.
+
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies`
+
+Returns the paginated list of growth strategies for a project.
+
+Query parameters:
+- `status` (optional string): Filter by status (`draft`, `in_review`, `approved`, `active`, `completed`, `archived`).
+- `time_horizon` (optional string): Filter by planning horizon (e.g. `Q1_2027`, `90_days`).
+- `limit` (optional integer, default `50`, maximum `200`): Maximum items to return.
+- `offset` (optional integer, default `0`, minimum `0`): Number of items to skip.
+
+## `POST /api/v1/projects/{project_id_or_slug}/strategies`
+
+Creates a new growth strategy in `draft` status. Automatically records an initial history entry in the same database transaction.
+
+Request body example:
+```json
+{
+  "name": "Q1 Student Activation Overhaul",
+  "strategic_vision": "Streamline first-session application flow to double activation rate across university campuses.",
+  "target_audience": "University students on Android mobile devices",
+  "strategic_constraints": "No paid channels; adhere strictly to student brand guidelines",
+  "budget_envelope": 5000.00,
+  "currency": "USD",
+  "time_horizon": "Q1_2027"
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}`
+
+Returns a single growth strategy by UUID or unique project-scoped slug.
+
+## `PATCH /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}`
+
+Updates a growth strategy. Status cannot be modified via PATCH; status changes must use the `/transition` endpoint.
+
+## `DELETE /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}`
+
+Deletes an untransitioned draft growth strategy. Returns HTTP 204 No Content. Returns HTTP 409 Conflict if the strategy has undergone transitions, has active goals, or has linked opportunities.
+
+## `POST /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/transition`
+
+Executes a validated lifecycle transition and records an immutable entry in `strategy_status_history`. Reversals, demotions, and archivals require an explanatory reason of at least 10 characters. Revalidates all linked opportunities.
+
+Request body example:
+```json
+{
+  "status": "in_review",
+  "reason": "Strategy finalized with Q1 targets and ready for executive review."
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/history`
+
+Returns the chronological immutable audit trail of lifecycle status transitions for a strategy.
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals`
+
+Returns the list of measurable key results/goals for a strategy.
+
+Query parameters:
+- `status` (optional string): Filter by goal status (`pending`, `on_track`, `at_risk`, `behind`, `achieved`, `abandoned`).
+
+## `POST /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals`
+
+Creates a measurable key result goal for a strategy.
+
+Request body example:
+```json
+{
+  "name": "Day 7 Student Retention Rate",
+  "description": "Increase Day 7 retention from 15% to 30%",
+  "metric_name": "d7_retention_pct",
+  "metric_unit": "percent",
+  "baseline_value": 15.0,
+  "target_value": 30.0,
+  "deadline": "2027-03-31T23:59:59Z"
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals/{goal_id}`
+
+Returns a goal including calculated progress percentage and metric direction (`is_increasing_metric`).
+
+## `PATCH /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals/{goal_id}`
+
+Updates goal configuration or status.
+
+## `DELETE /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals/{goal_id}`
+
+Deletes a goal. Returns HTTP 204 No Content. Returns HTTP 409 Conflict if metric progress updates have been recorded for the goal.
+
+## `POST /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals/{goal_id}/progress`
+
+Records an append-only progress check-in, atomically updating the goal's `current_value` and inserting an immutable `goal_metric_updates` record.
+
+Request body example:
+```json
+{
+  "new_value": 22.5,
+  "notes": "Mid-quarter check-in following rollout of cached profile apply."
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/goals/{goal_id}/progress`
+
+Returns the chronological history of metric progress check-ins for a goal.
+
+## `GET /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/opportunities`
+
+Lists all Phase 4 growth opportunities associated with this strategy along with contextual strategic rationale.
+
+## `POST /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/opportunities`
+
+Associates one or more growth opportunities with the strategy. Enforces status validation rules and project-level integrity.
+
+Request body example:
+```json
+{
+  "items": [
+    {
+      "opportunity_id": "4d5e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+      "strategic_rationale": "Directly addresses application completion friction."
+    }
+  ]
+}
+```
+
+## `DELETE /api/v1/projects/{project_id_or_slug}/strategies/{strategy_id_or_slug}/opportunities/{opportunity_id}`
+
+Unlinks an opportunity from a strategy. Returns HTTP 204 No Content.

@@ -21,6 +21,7 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  Target,
   Trash2,
   User,
   WifiOff,
@@ -38,6 +39,7 @@ import {
 } from "./lib/api";
 import { ResearchVault } from "./components/ResearchVault";
 import { OpportunitiesBoard } from "./components/OpportunitiesBoard";
+import { StrategyCanvas } from "./components/StrategyCanvas";
 import type {
   ComponentHealth,
   HealthResponse,
@@ -49,7 +51,7 @@ import type {
   SystemInfo,
 } from "./types";
 
-type Page = "Overview" | "Projects" | "Research Vault" | "Opportunities" | "Agent Activity" | "Settings";
+type Page = "Overview" | "Projects" | "Research Vault" | "Opportunities" | "Strategy & Goals" | "Agent Activity" | "Settings";
 type Connection =
   | { state: "loading" }
   | { state: "offline"; checkedAt: Date }
@@ -60,6 +62,7 @@ const navigation: { label: Page; icon: LucideIcon }[] = [
   { label: "Projects", icon: Command },
   { label: "Research Vault", icon: Database },
   { label: "Opportunities", icon: Sparkles },
+  { label: "Strategy & Goals", icon: Target },
   { label: "Agent Activity", icon: Activity },
 ];
 
@@ -231,6 +234,13 @@ function App() {
           )}
           {page === "Opportunities" && (
             <OpportunitiesBoard
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
+          {page === "Strategy & Goals" && (
+            <StrategyCanvas
               projects={projects}
               activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
               onSelectProject={setActiveProjectId}

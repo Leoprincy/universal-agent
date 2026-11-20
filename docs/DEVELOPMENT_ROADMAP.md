@@ -28,11 +28,17 @@ This roadmap formalizes the sequential eight-phase development model for Univers
 - Implement many-to-many opportunity/research associations with contextual linking notes.
 - Provide comprehensive dashboard interfaces: Research Vault, Opportunities Board, Detail Drawer, Evidence Linker, and Transition Modal.
 
-## Future Phases (Not Started)
+### Phase 5 — Strategy & Goals (Active — Backend Complete)
+- Introduce growth strategies with declarative budget envelopes, ISO-4217 currency validation, strategic vision, constraints, and time horizons.
+- Implement measurable strategic goals and key results with baseline, current, and target metrics.
+- Support direction-aware progress calculations for both increasing metrics and decreasing metrics (lower is better) with zero-division safeguards.
+- Establish strategy lifecycle state machine (`draft`, `in_review`, `approved`, `active`, `completed`, `archived`) with mandatory explanation reasons for consequential transitions.
+- Enforce opportunity status revalidation upon strategy review and approval (all linked opportunities must be approved).
+- Maintain immutable append-only ledgers for strategy status history and goal metric progress updates with server-derived actor identity.
+- Enforce project-level composite foreign keys across strategies, goals, history, updates, and opportunity associations.
+- Provide REST API endpoints and full test suite covering CRUD, transitions, associations, and multi-tenancy isolation.
 
-### Phase 5 — Campaign Planning
-- Introduce human-reviewed plans, growth goals, budgets, constraints, and approval states.
-- Support channel strategy synthesis prior to any execution or live network interaction.
+## Future Phases (Not Started)
 
 ### Phase 6 — Execution Adapters
 - Add opt-in provider integrations behind interfaces, with credential management, rate limits, audit trails, and safety controls.

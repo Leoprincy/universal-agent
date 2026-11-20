@@ -5,10 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import UnauthorizedError
 from app.database.connection import DatabaseConnection
+from app.services.goal import GoalService
 from app.services.health import HealthService
 from app.services.opportunity import OpportunityService
 from app.services.project import ProjectService
 from app.services.research import ResearchService
+from app.services.strategy import StrategyService
 
 
 @dataclass
@@ -66,3 +68,11 @@ def get_research_service(session: Session = Depends(get_db_session)) -> Research
 
 def get_opportunity_service(session: Session = Depends(get_db_session)) -> OpportunityService:
     return OpportunityService(session)
+
+
+def get_strategy_service(session: Session = Depends(get_db_session)) -> StrategyService:
+    return StrategyService(session)
+
+
+def get_goal_service(session: Session = Depends(get_db_session)) -> GoalService:
+    return GoalService(session)

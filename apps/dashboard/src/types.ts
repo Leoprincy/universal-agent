@@ -232,3 +232,166 @@ export interface AssociateResearchResponse {
   linked_count: number;
   items: AssociatedResearch[];
 }
+
+// ─── Phase 5: Strategy & Goals ──────────────────────────────────────────────
+
+export type StrategyStatus = "draft" | "in_review" | "approved" | "active" | "completed" | "archived";
+
+export interface GrowthStrategy {
+  id: string;
+  project_id: string;
+  name: string;
+  slug: string;
+  description?: string | null;
+  strategic_vision: string;
+  target_audience: string;
+  strategic_constraints?: string | null;
+  budget_envelope?: number | null;
+  currency: string;
+  time_horizon: string;
+  status: StrategyStatus;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface GrowthStrategyListResponse {
+  items: GrowthStrategy[];
+  total: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface GrowthStrategyCreateInput {
+  name: string;
+  slug?: string;
+  description?: string;
+  strategic_vision: string;
+  target_audience: string;
+  strategic_constraints?: string;
+  budget_envelope?: number;
+  currency?: string;
+  time_horizon: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GrowthStrategyUpdateInput {
+  name?: string;
+  description?: string;
+  strategic_vision?: string;
+  target_audience?: string;
+  strategic_constraints?: string;
+  budget_envelope?: number;
+  currency?: string;
+  time_horizon?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GrowthStrategyTransitionInput {
+  status: StrategyStatus;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface StrategyStatusHistory {
+  id: string;
+  strategy_id: string;
+  project_id: string;
+  previous_status?: StrategyStatus | null;
+  new_status: StrategyStatus;
+  reason?: string | null;
+  actor: string;
+  system_metadata?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface StrategyStatusHistoryListResponse {
+  items: StrategyStatusHistory[];
+  total: number;
+}
+
+export type GoalStatus = "pending" | "on_track" | "at_risk" | "behind" | "achieved" | "abandoned";
+
+export interface StrategyGoal {
+  id: string;
+  project_id: string;
+  strategy_id: string;
+  name: string;
+  description?: string | null;
+  metric_name: string;
+  metric_unit: string;
+  baseline_value: number;
+  current_value: number;
+  target_value: number;
+  deadline?: string | null;
+  status: GoalStatus;
+  progress_percentage?: number | null;
+  is_increasing_metric: boolean;
+  metadata?: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface StrategyGoalCreateInput {
+  name: string;
+  description?: string;
+  metric_name: string;
+  metric_unit: string;
+  baseline_value: number;
+  target_value: number;
+  current_value?: number;
+  deadline?: string;
+  status?: GoalStatus;
+  metadata?: Record<string, unknown>;
+}
+
+export interface StrategyGoalUpdateInput {
+  name?: string;
+  description?: string;
+  metric_name?: string;
+  metric_unit?: string;
+  baseline_value?: number;
+  target_value?: number;
+  current_value?: number;
+  deadline?: string;
+  status?: GoalStatus;
+  metadata?: Record<string, unknown>;
+}
+
+export interface GoalMetricUpdate {
+  id: string;
+  goal_id: string;
+  project_id: string;
+  previous_value: number;
+  new_value: number;
+  notes?: string | null;
+  actor: string;
+  created_at: string;
+}
+
+export interface GoalMetricUpdateInput {
+  new_value: number;
+  notes?: string;
+}
+
+export interface AssociatedOpportunityItem {
+  strategy_id: string;
+  opportunity_id: string;
+  project_id: string;
+  strategic_rationale?: string | null;
+  created_at: string;
+  opportunity: Opportunity;
+}
+
+export interface StrategyOpportunityAssociateItem {
+  opportunity_id: string;
+  strategic_rationale?: string;
+}
+
+export interface StrategyOpportunityAssociationResponse {
+  strategy_id: string;
+  opportunity_id: string;
+  project_id: string;
+  strategic_rationale?: string | null;
+  created_at: string;
+}
