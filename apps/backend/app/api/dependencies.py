@@ -6,7 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.errors import UnauthorizedError
 from app.database.connection import DatabaseConnection
 from app.services.health import HealthService
+from app.services.opportunity import OpportunityService
 from app.services.project import ProjectService
+from app.services.research import ResearchService
 
 
 @dataclass
@@ -56,3 +58,11 @@ def get_db_session(request: Request) -> Generator[Session, None, None]:
 
 def get_project_service(session: Session = Depends(get_db_session)) -> ProjectService:
     return ProjectService(session)
+
+
+def get_research_service(session: Session = Depends(get_db_session)) -> ResearchService:
+    return ResearchService(session)
+
+
+def get_opportunity_service(session: Session = Depends(get_db_session)) -> OpportunityService:
+    return OpportunityService(session)

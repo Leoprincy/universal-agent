@@ -4,9 +4,13 @@ class ApplicationError(Exception):
     code = "application_error"
     status_code = 400
 
-    def __init__(self, message: str) -> None:
+    def __init__(self, message: str, code: str | None = None, status_code: int | None = None) -> None:
         super().__init__(message)
         self.message = message
+        if code is not None:
+            self.code = code
+        if status_code is not None:
+            self.status_code = status_code
 
 
 class NotFoundError(ApplicationError):
@@ -27,3 +31,8 @@ class UnauthorizedError(ApplicationError):
 class ForbiddenError(ApplicationError):
     code = "forbidden"
     status_code = 403
+
+
+class UnprocessableEntityError(ApplicationError):
+    code = "unprocessable_entity"
+    status_code = 422

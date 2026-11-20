@@ -36,6 +36,8 @@ import {
   listProjects,
   updateProject,
 } from "./lib/api";
+import { ResearchVault } from "./components/ResearchVault";
+import { OpportunitiesBoard } from "./components/OpportunitiesBoard";
 import type {
   ComponentHealth,
   HealthResponse,
@@ -47,7 +49,7 @@ import type {
   SystemInfo,
 } from "./types";
 
-type Page = "Overview" | "Projects" | "Agent Activity" | "Settings";
+type Page = "Overview" | "Projects" | "Research Vault" | "Opportunities" | "Agent Activity" | "Settings";
 type Connection =
   | { state: "loading" }
   | { state: "offline"; checkedAt: Date }
@@ -56,6 +58,8 @@ type Connection =
 const navigation: { label: Page; icon: LucideIcon }[] = [
   { label: "Overview", icon: LayoutDashboard },
   { label: "Projects", icon: Command },
+  { label: "Research Vault", icon: Database },
+  { label: "Opportunities", icon: Sparkles },
   { label: "Agent Activity", icon: Activity },
 ];
 
@@ -64,6 +68,7 @@ function App() {
   const [connection, setConnection] = useState<Connection>({ state: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
+  const [activeProjectId, setActiveProjectId] = useState<string>("");
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [errorBanner, setErrorBanner] = useState<string | null>(null);
@@ -73,6 +78,7 @@ function App() {
     try {
       const result = await listProjects();
       setProjects(result.items);
+      setActiveProjectId((prev) => prev || (result.items[0]?.id ?? ""));
       setErrorBanner(null);
     } catch (err) {
       setErrorBanner(err instanceof Error ? err.message : "Failed to load projects");
@@ -214,6 +220,20 @@ function App() {
               onProjectUpdated={handleProjectUpdated}
               onProjectDeleted={(id) => setProjects((prev) => prev.filter((p) => p.id !== id))}
               onError={(msg) => setErrorBanner(msg)}
+            />
+          )}
+          {page === "Research Vault" && (
+            <ResearchVault
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
+          {page === "Opportunities" && (
+            <OpportunitiesBoard
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
             />
           )}
           {page === "Agent Activity" && <EmptyPage kind="activity" />}

@@ -104,3 +104,80 @@ Request body example:
 ## `DELETE /api/v1/projects/{id_or_slug}`
 
 Deletes a growth project. Returns HTTP 204 No Content.
+
+
+## `GET /api/v1/projects/{project_id_or_slug}/research`
+
+Returns the paginated list of research records for a growth project.
+
+Query parameters:
+- `source_type` (optional string): Filter by source type (`user_interview`, `app_review`, `competitor_analysis`, `analytics`, `market_report`, `manual_observation`).
+- `limit` (optional integer, default `50`, maximum `200`): Maximum items to return.
+- `offset` (optional integer, default `0`, minimum `0`): Number of items to skip.
+
+## `POST /api/v1/projects/{project_id_or_slug}/research`
+
+Creates a new research record with strict provenance tracking and source-type-specific validation.
+
+Request body example:
+```json
+{
+  "title": "Play Store checkout hang reports",
+  "source_type": "app_review",
+  "source_name": "Google Play Store",
+  "source_quote": "App spins for 30 seconds when clicking Apply and often fails silently.",
+  "observation_summary": "Substantial customer friction observed in job application submission loop.",
+  "interpretation_notes": "Application payload timeout likely caused by unindexed student document lookups.",
+  "evidence_data": { "rating": 1, "app_version": "2.4.1" },
+  "observed_at": "2026-11-18T10:15:00Z",
+  "published_at": "2026-11-18T10:20:00Z"
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/opportunities`
+
+Returns the paginated list of growth opportunities for a project.
+
+Query parameters:
+- `status` (optional string): Filter by status (`draft`, `in_review`, `approved`, `rejected`, `archived`).
+- `category` (optional string): Filter by category (`acquisition`, `activation`, `retention`, `referral`, `revenue`, `experimentation`).
+- `priority` (optional string): Filter by priority (`p0_urgent`, `p1_high`, `p2_medium`, `p3_low`).
+
+## `POST /api/v1/projects/{project_id_or_slug}/opportunities`
+
+Creates a new growth opportunity following the 4-part taxonomy. The initial status is always `draft`, priority is deterministically computed from impact and effort, and an initial status history record is committed in the same database transaction.
+
+Request body example:
+```json
+{
+  "title": "One-Tap Resume Quick-Apply for High-Intent Students",
+  "problem_statement": "Students take 5 minutes to submit applications.",
+  "hypothesis": "If we allow students to pre-upload verified resumes and apply in one tap, application completion rates will increase by 25%.",
+  "proposed_mechanism": "Cache verified profile payloads on client.",
+  "target_audience": "University students applying to retail shifts",
+  "category": "activation",
+  "estimated_impact": "critical",
+  "estimated_effort": "low",
+  "confidence_score": 0.85
+}
+```
+
+## `POST /api/v1/projects/{project_id_or_slug}/opportunities/{id_or_slug}/transition`
+
+Executes a validated lifecycle transition and records an immutable entry in `opportunity_status_history`. Rejections and returns to draft require an explanatory reason of at least 10 characters.
+
+Request body example:
+```json
+{
+  "status": "rejected",
+  "reason": "Technical dependency on third-party verification API exceeds latency budget for Q4."
+}
+```
+
+## `GET /api/v1/projects/{project_id_or_slug}/opportunities/{id_or_slug}/history`
+
+Returns the chronological immutable audit trail of all lifecycle status transitions for an opportunity.
+
+## `POST /api/v1/projects/{project_id_or_slug}/opportunities/{id_or_slug}/research`
+
+Associates one or more research records with an opportunity, along with individual contextual notes. Enforces project-level integrity.
