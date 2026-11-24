@@ -20,3 +20,4 @@ class HealthResponse(BaseModel):
     application: Literal["running"] = "running"
     database: ComponentHealth
     redis: ComponentHealth
+    queue: ComponentHealth | None = None

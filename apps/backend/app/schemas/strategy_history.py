@@ -14,7 +14,7 @@ class StrategyStatusHistoryResponse(BaseModel):
     new_status: StrategyStatus
     reason: str | None = None
     actor: str
-    system_metadata: dict[str, Any] | None = Field(default=None, alias="system_metadata_json")
+    system_metadata_json: dict[str, Any] | None = Field(default=None, alias="system_metadata")
     created_at: datetime
 
 

@@ -367,3 +367,74 @@ def test_cross_project_api_isolation(test_app):
                 assert cross_goal.status_code == 404
 
     asyncio.run(run())
+
+
+def test_goal_status_history_api(test_app):
+    async def run():
+        async with test_app.router.lifespan_context(test_app):
+            async with AsyncClient(transport=ASGITransport(app=test_app), base_url="http://test") as client:
+                p_res = await client.post("/api/v1/projects", json={"name": "Goal History API"})
+                proj_id = p_res.json()["id"]
+
+                s_res = await client.post(
+                    f"/api/v1/projects/{proj_id}/strategies",
+                    json={
+                        "name": "Hist Strategy",
+                        "strategic_vision": "V",
+                        "target_audience": "A",
+                        "time_horizon": "Q1",
+                    },
+                )
+                strat_id = s_res.json()["id"]
+
+                # Second strategy in same project for cross-strategy 404 check
+                s2_res = await client.post(
+                    f"/api/v1/projects/{proj_id}/strategies",
+                    json={
+                        "name": "Other Strategy",
+                        "strategic_vision": "V",
+                        "target_audience": "A",
+                        "time_horizon": "Q1",
+                    },
+                )
+                strat2_id = s2_res.json()["id"]
+
+                g_res = await client.post(
+                    f"/api/v1/projects/{proj_id}/strategies/{strat_id}/goals",
+                    json={
+                        "name": "G",
+                        "metric_name": "m",
+                        "metric_unit": "u",
+                        "baseline_value": 1.0,
+                        "target_value": 10.0,
+                    },
+                )
+                assert g_res.status_code == 201
+                goal_id = g_res.json()["id"]
+
+                # Manual status change writes a second history entry
+                u_res = await client.patch(
+                    f"/api/v1/projects/{proj_id}/strategies/{strat_id}/goals/{goal_id}",
+                    json={"status": "on_track", "reason": "manual check-in"},
+                )
+                assert u_res.status_code == 200
+
+                hist = await client.get(
+                    f"/api/v1/projects/{proj_id}/strategies/{strat_id}/goals/{goal_id}/history"
+                )
+                assert hist.status_code == 200
+                items = hist.json()["items"]
+                assert len(items) == 2
+                assert items[0]["new_status"] == "pending"
+                assert items[1]["new_status"] == "on_track"
+                assert items[1]["previous_status"] == "pending"
+                assert items[1]["reason"] == "manual check-in"
+                assert "created_at" in items[0] and "actor" in items[0]
+
+                # Cross-strategy access to the same goal returns 404
+                wrong = await client.get(
+                    f"/api/v1/projects/{proj_id}/strategies/{strat2_id}/goals/{goal_id}/history"
+                )
+                assert wrong.status_code == 404
+
+    asyncio.run(run())

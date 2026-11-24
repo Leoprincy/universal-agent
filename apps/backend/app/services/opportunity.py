@@ -10,9 +10,11 @@ from sqlalchemy.orm import Session
 from app.core.errors import ConflictError, NotFoundError, UnprocessableEntityError
 from app.database.models import (
     GrowthOpportunity,
+    GrowthStrategy,
     OpportunityResearchAssociation,
     OpportunityStatusHistory,
     ResearchRecord,
+    StrategyOpportunityAssociation,
 )
 from app.schemas.association import AssociationItem
 from app.schemas.opportunity import (
@@ -175,16 +177,22 @@ class OpportunityService:
                 ) from exc
             raise
 
-    def transition_opportunity(
+    def _apply_transition(
         self,
-        opp_id_or_slug: str,
-        transition: OpportunityTransition,
-        project_id: str,
+        opp: GrowthOpportunity,
+        target_status: str,
+        reason: str | None,
+        metadata_json: dict | None,
         actor: str,
-    ) -> GrowthOpportunity:
-        opp = self.get_opportunity(opp_id_or_slug, project_id=project_id)
+        project_id: str,
+    ) -> None:
+        """Validate and apply a lifecycle transition without committing.
+
+        Flushes pending changes so callers can compose this with other writes
+        inside a single transaction.
+        """
         current_status = opp.status
-        target_status = transition.status
+        target_status = str(target_status)
 
         if current_status == target_status:
             raise ConflictError(
@@ -200,10 +208,41 @@ class OpportunityService:
             )
 
         if (current_status, target_status) in REASON_REQUIRED_TRANSITIONS:
-            if not transition.reason or len(transition.reason.strip()) < 10:
+            if not reason or len(reason.strip()) < 10:
                 raise UnprocessableEntityError(
                     f"Transition from '{current_status}' to '{target_status}' requires an explanatory reason of at least 10 characters",
                     code="missing_transition_reason",
+                )
+
+        # Guard: the target status must keep the opportunity eligible for
+        # every strategy it is linked to. Draft and in-review strategies
+        # require opportunities in in_review or approved; approved and
+        # active strategies require approved opportunities. The user can
+        # resolve a conflict by unlinking the opportunity or revising the
+        # strategy through the supported association endpoints.
+        linked_statuses = self._session.scalars(
+            select(GrowthStrategy.status)
+            .join(
+                StrategyOpportunityAssociation,
+                (StrategyOpportunityAssociation.strategy_id == GrowthStrategy.id)
+                & (StrategyOpportunityAssociation.project_id == GrowthStrategy.project_id),
+            )
+            .where(
+                (StrategyOpportunityAssociation.opportunity_id == opp.id)
+                & (StrategyOpportunityAssociation.project_id == project_id)
+                & (GrowthStrategy.status.in_(["draft", "in_review", "approved", "active"]))
+            )
+        ).all()
+        for strategy_status in linked_statuses:
+            eligible = (
+                {"in_review", "approved"}
+                if strategy_status in ("draft", "in_review")
+                else {"approved"}
+            )
+            if target_status not in eligible:
+                raise ConflictError(
+                    f"Cannot transition this opportunity to '{target_status}': it is linked to a '{strategy_status}' growth strategy that requires opportunities in {sorted(eligible)}. Unlink it or revise the strategy first.",
+                    code="opportunity_linked_to_active_strategy",
                 )
 
         opp.status = target_status
@@ -215,13 +254,31 @@ class OpportunityService:
             project_id=project_id,
             previous_status=current_status,
             new_status=target_status,
-            reason=transition.reason.strip() if transition.reason else None,
+            reason=reason.strip() if reason else None,
             actor=actor,
-            system_metadata_json=transition.metadata_json,
+            system_metadata_json=metadata_json,
         )
+        self._session.add(history)
+        self._session.flush()
+
+    def transition_opportunity(
+        self,
+        opp_id_or_slug: str,
+        transition: OpportunityTransition,
+        project_id: str,
+        actor: str,
+    ) -> GrowthOpportunity:
+        opp = self.get_opportunity(opp_id_or_slug, project_id=project_id)
 
         try:
-            self._session.add(history)
+            self._apply_transition(
+                opp,
+                target_status=transition.status,
+                reason=transition.reason,
+                metadata_json=transition.metadata_json,
+                actor=actor,
+                project_id=project_id,
+            )
             self._session.commit()
             self._session.refresh(opp)
             return opp
@@ -238,18 +295,17 @@ class OpportunityService:
     ) -> GrowthOpportunity:
         opp = self.get_opportunity(opp_id_or_slug, project_id=project_id)
 
-        # If status is changing, enforce full lifecycle transition
-        if data.status is not None and data.status != opp.status:
-            transition = OpportunityTransition(
-                status=data.status,
+        # If status is changing, enforce full lifecycle transition in the
+        # same transaction as the field updates (flush, not commit).
+        status_changed = data.status is not None and data.status != opp.status
+        if status_changed:
+            self._apply_transition(
+                opp,
+                target_status=data.status,
                 reason=data.reason,
-                metadata=data.metadata_json,
-            )
-            self.transition_opportunity(
-                opp_id_or_slug=opp.id,
-                transition=transition,
-                project_id=project_id,
+                metadata_json=data.metadata_json,
                 actor=actor,
+                project_id=project_id,
             )
 
         update_data = data.model_dump(exclude_unset=True, by_alias=False)

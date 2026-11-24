@@ -2,15 +2,39 @@ import type {
   AssociateResearchResponse,
   AssociatedOpportunityItem,
   AssociatedResearch,
+  Experiment,
+  ExperimentEvaluation,
+  ExperimentListResponse,
+  ExperimentOutcome,
+  ExperimentStatusHistoryEntry,
   GoalMetricUpdate,
   GoalMetricUpdateInput,
   GoalStatus,
+  GoalStatusHistoryListResponse,
   GrowthStrategy,
   GrowthStrategyCreateInput,
   GrowthStrategyListResponse,
   GrowthStrategyTransitionInput,
   GrowthStrategyUpdateInput,
   HealthResponse,
+  Job,
+  JobEvent,
+  JobListResponse,
+  JobSchedule,
+  JobScheduleListResponse,
+  JobStats,
+  OpsOverview,
+  IntegrationAction,
+  IntegrationActionCreateInput,
+  IntegrationActionEvent,
+  IntegrationActionListResponse,
+  IntegrationCallLog,
+  IntegrationProvider,
+  IntegrationProviderCreateInput,
+  IntegrationProviderUpdateInput,
+  LearningEvidence,
+  LearningListResponse,
+  LearningRecord,
   Opportunity,
   OpportunityCreateInput,
   OpportunityListResponse,
@@ -31,6 +55,7 @@ import type {
   StrategyOpportunityAssociateItem,
   StrategyOpportunityAssociationResponse,
   StrategyStatus,
+  SuccessCriteria,
   StrategyStatusHistoryListResponse,
   SystemInfo,
 } from "../types";
@@ -577,6 +602,16 @@ export async function getGoalMetricHistory(
   );
 }
 
+export async function getGoalStatusHistory(
+  projectId: string,
+  strategyIdOrSlug: string,
+  goalId: string
+): Promise<GoalStatusHistoryListResponse> {
+  return getJson<GoalStatusHistoryListResponse>(
+    `/api/v1/projects/${projectId}/strategies/${strategyIdOrSlug}/goals/${goalId}/history`
+  );
+}
+
 // ─── Opportunity Associations API ───────────────────────────────────────────
 
 export async function listAssociatedOpportunities(
@@ -629,4 +664,422 @@ export async function unlinkOpportunity(
 
 export function getApiBaseUrl(): string {
   return apiBaseUrl;
+}
+
+// ─── Phase 6: Integrations API ─────────────────────────────────────────────
+
+async function mutateJson<T>(
+  path: string,
+  method: string,
+  body?: unknown
+): Promise<T> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (!response.ok && response.status !== 204) {
+    const errorBody = await response.json().catch(() => null);
+    const msg = errorBody?.error?.message ?? `Backend returned HTTP ${response.status}`;
+    throw new Error(msg);
+  }
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
+}
+
+export function listIntegrationProviders(projectId: string): Promise<IntegrationProvider[]> {
+  return getJson<IntegrationProvider[]>(
+    `/api/v1/projects/${projectId}/integrations/providers`
+  );
+}
+
+export function createIntegrationProvider(
+  projectId: string,
+  data: IntegrationProviderCreateInput
+): Promise<IntegrationProvider> {
+  return mutateJson<IntegrationProvider>(
+    `/api/v1/projects/${projectId}/integrations/providers`,
+    "POST",
+    data
+  );
+}
+
+export function updateIntegrationProvider(
+  projectId: string,
+  providerIdOrName: string,
+  data: IntegrationProviderUpdateInput
+): Promise<IntegrationProvider> {
+  return mutateJson<IntegrationProvider>(
+    `/api/v1/projects/${projectId}/integrations/providers/${providerIdOrName}`,
+    "PATCH",
+    data
+  );
+}
+
+export function deleteIntegrationProvider(
+  projectId: string,
+  providerIdOrName: string
+): Promise<void> {
+  return mutateJson<void>(
+    `/api/v1/projects/${projectId}/integrations/providers/${providerIdOrName}`,
+    "DELETE"
+  );
+}
+
+export function setIntegrationCredential(
+  projectId: string,
+  providerIdOrName: string,
+  credential: string
+): Promise<void> {
+  return mutateJson<void>(
+    `/api/v1/projects/${projectId}/integrations/providers/${providerIdOrName}/credential`,
+    "PUT",
+    { credential }
+  );
+}
+
+export function listIntegrationActions(
+  projectId: string,
+  providerId?: string,
+  status?: string
+): Promise<IntegrationActionListResponse> {
+  const params = new URLSearchParams();
+  if (providerId) params.set("provider_id", providerId);
+  if (status) params.set("status", status);
+  const qs = params.toString();
+  return getJson<IntegrationActionListResponse>(
+    `/api/v1/projects/${projectId}/integrations/actions${qs ? `?${qs}` : ""}`
+  );
+}
+
+export function createIntegrationAction(
+  projectId: string,
+  providerIdOrName: string,
+  data: IntegrationActionCreateInput
+): Promise<IntegrationAction> {
+  return mutateJson<IntegrationAction>(
+    `/api/v1/projects/${projectId}/integrations/providers/${providerIdOrName}/actions`,
+    "POST",
+    data
+  );
+}
+
+export function decideIntegrationAction(
+  projectId: string,
+  actionId: string,
+  decision: "approve" | "reject" | "cancel",
+  reason?: string
+): Promise<IntegrationAction> {
+  return mutateJson<IntegrationAction>(
+    `/api/v1/projects/${projectId}/integrations/actions/${actionId}/${decision}`,
+    "POST",
+    reason ? { reason } : undefined
+  );
+}
+
+export function executeIntegrationAction(
+  projectId: string,
+  actionId: string
+): Promise<IntegrationAction> {
+  return mutateJson<IntegrationAction>(
+    `/api/v1/projects/${projectId}/integrations/actions/${actionId}/execute`,
+    "POST"
+  );
+}
+
+export function getIntegrationActionEvents(
+  projectId: string,
+  actionId: string
+): Promise<IntegrationActionEvent[]> {
+  return getJson<IntegrationActionEvent[]>(
+    `/api/v1/projects/${projectId}/integrations/actions/${actionId}/events`
+  );
+}
+
+export function getIntegrationActionCalls(
+  projectId: string,
+  actionId: string
+): Promise<IntegrationCallLog[]> {
+  return getJson<IntegrationCallLog[]>(
+    `/api/v1/projects/${projectId}/integrations/actions/${actionId}/calls`
+  );
+}
+
+// ─── Phase 7: Experiments & Learnings API ─────────────────────────────────
+
+export function listExperiments(
+  projectId: string,
+  strategyId: string,
+  status?: string
+): Promise<ExperimentListResponse> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  return getJson<ExperimentListResponse>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments${q}`
+  );
+}
+
+export function createExperiment(
+  projectId: string,
+  strategyId: string,
+  data: {
+    name: string;
+    hypothesis?: string;
+    goal_id?: string;
+    success_criteria?: SuccessCriteria;
+    ends_at?: string;
+  }
+): Promise<Experiment> {
+  return mutateJson<Experiment>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments`,
+    "POST",
+    data
+  );
+}
+
+export function getExperiment(
+  projectId: string,
+  strategyId: string,
+  experimentId: string
+): Promise<Experiment> {
+  return getJson<Experiment>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}`
+  );
+}
+
+export function updateExperiment(
+  projectId: string,
+  strategyId: string,
+  experimentId: string,
+  data: Partial<{
+    name: string;
+    hypothesis: string;
+    goal_id: string | null;
+    success_criteria: SuccessCriteria | null;
+    ends_at: string | null;
+  }>
+): Promise<Experiment> {
+  return mutateJson<Experiment>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}`,
+    "PATCH",
+    data
+  );
+}
+
+export function transitionExperiment(
+  projectId: string,
+  strategyId: string,
+  experimentId: string,
+  status: string,
+  reason?: string
+): Promise<Experiment> {
+  return mutateJson<Experiment>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/transition`,
+    "POST",
+    { status, reason }
+  );
+}
+
+export function getExperimentHistory(
+  projectId: string,
+  strategyId: string,
+  experimentId: string
+): Promise<ExperimentStatusHistoryEntry[]> {
+  return getJson<ExperimentStatusHistoryEntry[]>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/history`
+  );
+}
+
+export function listExperimentOutcomes(
+  projectId: string,
+  strategyId: string,
+  experimentId: string
+): Promise<ExperimentOutcome[]> {
+  return getJson<ExperimentOutcome[]>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/outcomes`
+  );
+}
+
+export function recordExperimentOutcome(
+  projectId: string,
+  strategyId: string,
+  experimentId: string,
+  data: {
+    metric_name: string;
+    value: number;
+    sample_size?: number;
+    observed_at: string;
+    source?: "manual" | "integration" | "import";
+    source_ref?: string;
+    notes?: string;
+    supersedes_id?: string;
+  }
+): Promise<ExperimentOutcome> {
+  return mutateJson<ExperimentOutcome>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/outcomes`,
+    "POST",
+    data
+  );
+}
+
+export function evaluateExperiment(
+  projectId: string,
+  strategyId: string,
+  experimentId: string
+): Promise<ExperimentEvaluation> {
+  return mutateJson<ExperimentEvaluation>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/evaluate`,
+    "POST"
+  );
+}
+
+export function listExperimentEvaluations(
+  projectId: string,
+  strategyId: string,
+  experimentId: string
+): Promise<ExperimentEvaluation[]> {
+  return getJson<ExperimentEvaluation[]>(
+    `/api/v1/projects/${projectId}/strategies/${strategyId}/experiments/${experimentId}/evaluations`
+  );
+}
+
+export function listLearnings(
+  projectId: string,
+  filters?: {
+    strategy_id?: string;
+    experiment_id?: string;
+    category?: string;
+    status?: string;
+  }
+): Promise<LearningListResponse> {
+  const params = new URLSearchParams();
+  if (filters?.strategy_id) params.set("strategy_id", filters.strategy_id);
+  if (filters?.experiment_id) params.set("experiment_id", filters.experiment_id);
+  if (filters?.category) params.set("category", filters.category);
+  if (filters?.status) params.set("status", filters.status);
+  const q = params.toString();
+  return getJson<LearningListResponse>(
+    `/api/v1/projects/${projectId}/learnings${q ? `?${q}` : ""}`
+  );
+}
+
+export function listValidatedLearnings(
+  projectId: string
+): Promise<LearningListResponse> {
+  return getJson<LearningListResponse>(
+    `/api/v1/projects/${projectId}/learnings/validated`
+  );
+}
+
+export function createLearning(
+  projectId: string,
+  data: {
+    title: string;
+    insight: string;
+    category?: string;
+    strategy_id?: string;
+    experiment_id?: string;
+    evidence?: LearningEvidence;
+  }
+): Promise<LearningRecord> {
+  return mutateJson<LearningRecord>(
+    `/api/v1/projects/${projectId}/learnings`,
+    "POST",
+    data
+  );
+}
+
+export function updateLearning(
+  projectId: string,
+  learningId: string,
+  data: Partial<{
+    title: string;
+    insight: string;
+    category: string | null;
+    strategy_id: string | null;
+    experiment_id: string | null;
+    evidence: LearningEvidence | null;
+  }>
+): Promise<LearningRecord> {
+  return mutateJson<LearningRecord>(
+    `/api/v1/projects/${projectId}/learnings/${learningId}`,
+    "PATCH",
+    data
+  );
+}
+
+export function validateLearning(
+  projectId: string,
+  learningId: string
+): Promise<LearningRecord> {
+  return mutateJson<LearningRecord>(
+    `/api/v1/projects/${projectId}/learnings/${learningId}/validate`,
+    "POST"
+  );
+}
+
+export function rejectLearning(
+  projectId: string,
+  learningId: string,
+  reason: string
+): Promise<LearningRecord> {
+  return mutateJson<LearningRecord>(
+    `/api/v1/projects/${projectId}/learnings/${learningId}/reject`,
+    "POST",
+    { reason }
+  );
+}
+
+// ── Phase 8: Jobs & operations ─────────────────────────────────────────────
+
+export function listJobs(
+  projectId: string,
+  options?: { status?: string; job_type?: string; limit?: number; offset?: number },
+): Promise<JobListResponse> {
+  const params = new URLSearchParams();
+  if (options?.status) params.set("status", options.status);
+  if (options?.job_type) params.set("job_type", options.job_type);
+  if (options?.limit !== undefined) params.set("limit", String(options.limit));
+  if (options?.offset !== undefined) params.set("offset", String(options.offset));
+  const qs = params.toString();
+  return getJson<JobListResponse>(`/api/v1/projects/${projectId}/jobs${qs ? `?${qs}` : ""}`);
+}
+
+export function getJobStats(projectId: string): Promise<JobStats> {
+  return getJson<JobStats>(`/api/v1/projects/${projectId}/jobs/stats`);
+}
+
+export function getJobEvents(projectId: string, jobId: string): Promise<JobEvent[]> {
+  return getJson<JobEvent[]>(`/api/v1/projects/${projectId}/jobs/${jobId}/events`);
+}
+
+export function enqueueJob(projectId: string, jobId: string): Promise<Job> {
+  return mutateJson<Job>(`/api/v1/projects/${projectId}/jobs/${jobId}/enqueue`, "POST");
+}
+
+export function cancelJob(projectId: string, jobId: string): Promise<Job> {
+  return mutateJson<Job>(`/api/v1/projects/${projectId}/jobs/${jobId}/cancel`, "POST");
+}
+
+export function listJobSchedules(projectId: string): Promise<JobScheduleListResponse> {
+  return getJson<JobScheduleListResponse>(`/api/v1/projects/${projectId}/jobs/schedules`);
+}
+
+export function createJobSchedule(
+  projectId: string,
+  data: { name: string; job_type: string; interval_seconds: number; payload?: Record<string, unknown>; next_run_at?: string },
+): Promise<JobSchedule> {
+  return mutateJson<JobSchedule>(`/api/v1/projects/${projectId}/jobs/schedules`, "POST", data);
+}
+
+export function setJobScheduleEnabled(
+  projectId: string, scheduleId: string, enabled: boolean,
+): Promise<JobSchedule> {
+  return mutateJson<JobSchedule>(`/api/v1/projects/${projectId}/jobs/schedules/${scheduleId}/enabled`, "POST", { enabled });
+}
+
+export function getOpsOverview(): Promise<OpsOverview> {
+  return getJson<OpsOverview>("/api/v1/ops/overview");
 }

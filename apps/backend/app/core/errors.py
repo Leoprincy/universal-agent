@@ -36,3 +36,8 @@ class ForbiddenError(ApplicationError):
 class UnprocessableEntityError(ApplicationError):
     code = "unprocessable_entity"
     status_code = 422
+
+
+class RateLimitError(ApplicationError):
+    code = "rate_limited"
+    status_code = 429

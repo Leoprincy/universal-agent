@@ -26,4 +26,5 @@ def test_health_service_bounds_an_unresponsive_component() -> None:
         "application": "running",
         "database": {"status": "connected", "message": "Connected"},
         "redis": {"status": "unavailable", "message": "Redis health check timed out"},
+        "queue": None,
     }

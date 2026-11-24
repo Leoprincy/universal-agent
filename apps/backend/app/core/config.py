@@ -28,6 +28,8 @@ class Settings(BaseSettings):
     api_v1_prefix: str = "/api/v1"
     api_key: SecretStr | None = None
     workspace_owner: str = "default"
+    credential_encryption_key: SecretStr | None = None
+    approval_ttl_seconds: int = Field(default=86400, gt=0)
 
 
 @lru_cache(maxsize=1)

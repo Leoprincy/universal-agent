@@ -378,12 +378,13 @@ class StrategyService:
                 )
 
             # Opportunity status validation rules:
-            # - Draft strategies may link opportunities in 'in_review' or 'approved'
+            # - Draft / In-review strategies may link opportunities in
+            #   'in_review' or 'approved' (eligible for strategy planning)
             # - Approved / Active strategies may ONLY link opportunities in 'approved'
-            if strategy.status == "draft":
+            if strategy.status in ("draft", "in_review"):
                 if opp.status not in ("in_review", "approved"):
                     raise UnprocessableEntityError(
-                        f"Draft strategies can only link opportunities in 'in_review' or 'approved' status. Opportunity '{opp.title}' is '{opp.status}'.",
+                        f"Strategies in '{strategy.status}' status can only link opportunities in 'in_review' or 'approved' status. Opportunity '{opp.title}' is '{opp.status}'.",
                         code="invalid_opportunity_status",
                     )
             elif strategy.status in ("approved", "active"):

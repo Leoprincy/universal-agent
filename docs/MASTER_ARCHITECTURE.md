@@ -4,7 +4,7 @@
 
 Universal Autonomous Growth Agent is intended to become a self-hosted platform that can support multiple products and, over time, research markets, identify growth opportunities, plan campaigns, acquire customers, measure outcomes, and learn from results. This repository implements only the local project foundation: an HTTP API, a status dashboard, and PostgreSQL/Redis development infrastructure.
 
-No AI model, browser automation, campaign execution, product records, or job worker is installed or simulated in this phase.
+No AI model, browser automation, campaign orchestration, product records, or job worker is installed or simulated. Phase 6 adds an `app/integrations` adapter layer: provider registry, encrypted credential codec, approval-gated action service, shared rate limiting, and append-only audit ledgers. Only the built-in `sandbox` adapter ships; real providers plug in behind the `IntegrationAdapter` protocol without touching orchestration. Phase 7 adds the measurement domain: `Experiment` (bounded hypothesis test under a strategy, optional goal link), append-only `ExperimentOutcome` (supersession-based corrections), append-only `ExperimentEvaluation` (deterministic success-criteria verdicts: succeeded/failed/inconclusive — insufficient evidence is never success), `ExperimentStatusHistory` (row-locked, monotonically sequenced audit), and `LearningRecord` (candidate→validated/rejected with verified evidence references). `GET /learnings/validated` is the service-level integration point for future recommendation workflows; no recommendation engine exists yet.
 
 ## Current shape
 

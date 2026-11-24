@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 GoalStatus = Literal["pending", "on_track", "at_risk", "behind", "achieved", "abandoned"]
 
@@ -43,7 +43,13 @@ class StrategyGoalBase(BaseModel):
 
 
 class StrategyGoalCreate(StrategyGoalBase):
-    pass
+    @model_validator(mode="after")
+    def validate_initial_status_pending(self) -> "StrategyGoalCreate":
+        if self.status != "pending":
+            raise ValueError(
+                "New goals must start in 'pending' status; use goal updates to change status"
+            )
+        return self
 
 
 class StrategyGoalUpdate(BaseModel):
@@ -58,6 +64,7 @@ class StrategyGoalUpdate(BaseModel):
     current_value: float | None = None
     deadline: datetime | None = None
     status: GoalStatus | None = None
+    reason: str | None = None  # Recorded in status history when status changes
     metadata_json: dict[str, Any] | None = Field(default=None, alias="metadata")
 
 
@@ -108,4 +115,23 @@ class GoalMetricUpdateResponse(BaseModel):
 
 class GoalMetricHistoryListResponse(BaseModel):
     items: list[GoalMetricUpdateResponse]
+    total: int
+
+
+class GoalStatusHistoryResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    id: str
+    goal_id: str
+    project_id: str
+    previous_status: GoalStatus | None = None
+    new_status: GoalStatus
+    reason: str | None = None
+    actor: str
+    system_metadata_json: dict[str, Any] | None = Field(default=None, alias="system_metadata")
+    created_at: datetime
+
+
+class GoalStatusHistoryListResponse(BaseModel):
+    items: list[GoalStatusHistoryResponse]
     total: int

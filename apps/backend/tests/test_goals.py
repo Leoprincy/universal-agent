@@ -119,6 +119,7 @@ class TestGoalCRUDAndProgressService:
                 deadline=deadline,
             ),
             project_id=project.id,
+            actor="test",
         )
 
         assert goal.id is not None
@@ -140,11 +141,13 @@ class TestGoalCRUDAndProgressService:
                 target_value=500.0,
             ),
             project_id=project.id,
+            actor="test",
         )
 
         # Record progress check-in #1
         updated_goal, update_rec1 = service.record_progress(
             goal.id,
+            strategy.id,
             GoalMetricUpdateCreate(
                 new_value=250.0,
                 notes="Week 2 check-in: Resume caching rolled out to 25% cohort",
@@ -162,6 +165,7 @@ class TestGoalCRUDAndProgressService:
         # Record progress check-in #2: goal achieved
         achieved_goal, update_rec2 = service.record_progress(
             goal.id,
+            strategy.id,
             GoalMetricUpdateCreate(
                 new_value=520.0,
                 notes="Target exceeded following university partner job fair",
@@ -174,7 +178,7 @@ class TestGoalCRUDAndProgressService:
         assert achieved_goal.status == "achieved"
 
         # Verify history retrieval
-        history = service.get_metric_history(goal.id, project_id=project.id)
+        history = service.get_metric_history(goal.id, strategy.id, project_id=project.id)
         assert len(history) == 2
         assert float(history[0].new_value) == 520.0  # Most recent first
         assert float(history[1].new_value) == 250.0
@@ -191,12 +195,13 @@ class TestGoalCRUDAndProgressService:
                 target_value=10.0,
             ),
             project_id=project.id,
+            actor="test",
         )
 
-        # Before any metric updates, goal can be deleted
-        service.delete_goal(goal.id, project_id=project.id)
-        with pytest.raises(NotFoundError):
-            service.get_goal(goal.id, project_id=project.id)
+        # Goals record status history at creation, so deletion is prohibited
+        # to preserve the audit trail (archive via 'abandoned' instead).
+        with pytest.raises(ConflictError, match="cannot be deleted"):
+            service.delete_goal(goal.id, strategy.id, project_id=project.id)
 
         # Create new goal and add progress
         goal2 = service.create_goal(
@@ -209,9 +214,11 @@ class TestGoalCRUDAndProgressService:
                 target_value=10.0,
             ),
             project_id=project.id,
+            actor="test",
         )
         service.record_progress(
             goal2.id,
+            strategy.id,
             GoalMetricUpdateCreate(new_value=5.0, notes="Check-in"),
             project_id=project.id,
             actor="lead",
@@ -219,4 +226,4 @@ class TestGoalCRUDAndProgressService:
 
         # Deleting goal with metric updates must be prohibited
         with pytest.raises(ConflictError, match="cannot be deleted"):
-            service.delete_goal(goal2.id, project_id=project.id)
+            service.delete_goal(goal2.id, strategy.id, project_id=project.id)

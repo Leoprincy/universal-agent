@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
-  ArrowDownRight,
-  ArrowUpRight,
+  BookOpen,
   Calendar,
   ChevronDown,
   CircleHelp,
   Command,
   Database,
   ExternalLink,
+  FlaskConical,
   LayoutDashboard,
   LoaderCircle,
   Pencil,
+  Plug,
   Plus,
-  Radio,
   RefreshCw,
   Search,
   Server,
@@ -37,6 +37,11 @@ import {
   listProjects,
   updateProject,
 } from "./lib/api";
+import { AdminConsole } from "./components/AdminConsole";
+import { ExperimentsConsole } from "./components/ExperimentsConsole";
+import { IntegrationsConsole } from "./components/IntegrationsConsole";
+import { JobsConsole } from "./components/JobsConsole";
+import { LearningsConsole } from "./components/LearningsConsole";
 import { ResearchVault } from "./components/ResearchVault";
 import { OpportunitiesBoard } from "./components/OpportunitiesBoard";
 import { StrategyCanvas } from "./components/StrategyCanvas";
@@ -51,23 +56,27 @@ import type {
   SystemInfo,
 } from "./types";
 
-type Page = "Overview" | "Projects" | "Research Vault" | "Opportunities" | "Strategy & Goals" | "Agent Activity" | "Settings";
+type Page = "Admin" | "Projects" | "Research Vault" | "Opportunities" | "Strategy & Goals" | "Experiments" | "Learnings" | "Jobs" | "Integrations" | "Agent Activity" | "Settings";
 type Connection =
   | { state: "loading" }
   | { state: "offline"; checkedAt: Date }
   | { state: "online"; health: HealthResponse; system?: SystemInfo; checkedAt: Date };
 
 const navigation: { label: Page; icon: LucideIcon }[] = [
-  { label: "Overview", icon: LayoutDashboard },
+  { label: "Admin", icon: LayoutDashboard },
   { label: "Projects", icon: Command },
   { label: "Research Vault", icon: Database },
   { label: "Opportunities", icon: Sparkles },
   { label: "Strategy & Goals", icon: Target },
+  { label: "Experiments", icon: FlaskConical },
+  { label: "Learnings", icon: BookOpen },
+  { label: "Jobs", icon: Activity },
+  { label: "Integrations", icon: Plug },
   { label: "Agent Activity", icon: Activity },
 ];
 
 function App() {
-  const [page, setPage] = useState<Page>("Overview");
+  const [page, setPage] = useState<Page>("Admin");
   const [connection, setConnection] = useState<Connection>({ state: "loading" });
   const [refreshing, setRefreshing] = useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
@@ -203,13 +212,20 @@ function App() {
             </div>
           )}
 
-          {page === "Overview" && (
-            <Overview
-              connection={connection}
+          {page === "Admin" && (
+            <AdminConsole
               projects={projects}
-              onOpenSettings={() => setPage("Settings")}
-              onOpenProjects={() => setPage("Projects")}
-              onNewProject={() => { setPage("Projects"); setModalOpen(true); }}
+              activeProjectId={activeProjectId}
+              onSelectProject={setActiveProjectId}
+              onProjectCreated={(created) => {
+                setProjects((prev) => [created, ...prev]);
+                setActiveProjectId(created.id);
+              }}
+              onProjectUpdated={handleProjectUpdated}
+              onProjectDeleted={(id) => {
+                setProjects((prev) => prev.filter((item) => item.id !== id));
+                setActiveProjectId((current) => (current === id ? "" : current));
+              }}
             />
           )}
           {page === "Projects" && (
@@ -246,131 +262,39 @@ function App() {
               onSelectProject={setActiveProjectId}
             />
           )}
+          {page === "Experiments" && (
+            <ExperimentsConsole
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
+          {page === "Learnings" && (
+            <LearningsConsole
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
+          {page === "Jobs" && (
+            <JobsConsole
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
+          {page === "Integrations" && (
+            <IntegrationsConsole
+              projects={projects}
+              activeProjectId={activeProjectId || (projects[0]?.id ?? "")}
+              onSelectProject={setActiveProjectId}
+            />
+          )}
           {page === "Agent Activity" && <EmptyPage kind="activity" />}
           {page === "Settings" && <SettingsPage connection={connection} />}
         </div>
       </main>
     </div>
-  );
-}
-
-// ─── Overview ────────────────────────────────────────────────────────────────
-
-function Overview({
-  connection,
-  projects,
-  onOpenSettings,
-  onOpenProjects,
-  onNewProject,
-}: {
-  connection: Connection;
-  projects: Project[];
-  onOpenSettings: () => void;
-  onOpenProjects: () => void;
-  onNewProject: () => void;
-}) {
-  const health = connection.state === "online" ? connection.health : undefined;
-  const connectedCount = health
-    ? [health.database, health.redis].filter((item) => item.status === "connected").length
-    : undefined;
-
-  return (
-    <>
-      <div className="page-heading flex items-end justify-between">
-        <div>
-          <div className="eyebrow"><span className="eyebrow-line" /> YOUR WORKSPACE</div>
-          <h1>Good to see you<span className="heading-period">.</span></h1>
-          <p className="page-subtitle">A clear view of your growth systems, all in one place.</p>
-        </div>
-        <button className="button button-secondary" onClick={onOpenSettings}><Settings size={15} /> Configure system</button>
-      </div>
-
-      <section className="metrics-grid" aria-label="System summary">
-        <MetricCard
-          icon={Radio}
-          label="APPLICATION API"
-          value={connection.state === "loading" ? "Checking" : connection.state === "offline" ? "Offline" : "Reachable"}
-          detail={connection.state === "online" ? `Version ${connection.system?.version ?? "—"}` : connection.state === "offline" ? "Could not reach the backend" : "Checking backend connection"}
-          tone={connection.state === "online" ? "lime" : connection.state === "offline" ? "rose" : "neutral"}
-          trend={connection.state === "online" ? <ArrowUpRight size={14} /> : connection.state === "offline" ? <ArrowDownRight size={14} /> : <LoaderCircle size={14} className="spin" />}
-        />
-        <MetricCard
-          icon={Database}
-          label="INFRASTRUCTURE"
-          value={connectedCount === undefined ? "—" : `${connectedCount} / 2`}
-          detail={health ? "Database and Redis connections" : "Waiting for backend health data"}
-          tone={connectedCount === 2 ? "lime" : health ? "amber" : "neutral"}
-          trend={health ? <ShieldCheck size={14} /> : <LoaderCircle size={14} className="spin" />}
-        />
-        <MetricCard
-          icon={Command}
-          label="PROJECTS"
-          value={String(projects.length)}
-          detail={projects.length === 0 ? "No projects yet — add your first" : projects.length === 1 ? "1 active project" : `${projects.length} projects in workspace`}
-          tone="violet"
-          trend={<Plus size={14} />}
-        />
-      </section>
-
-      <div className="overview-grid">
-        <section className="panel readiness-panel">
-          <div className="panel-heading">
-            <div><span className="panel-kicker">LIVE STATUS</span><h2>System health</h2></div>
-            <span className="live-label"><span /> LIVE</span>
-          </div>
-          {health ? (
-            <div className="health-list">
-              <HealthRow icon={Server} label="Backend API" detail="Application process" status={{ status: "connected", message: "Reachable" }} />
-              <HealthRow icon={Database} label="PostgreSQL" detail={health.database.message} status={health.database} />
-              <HealthRow icon={Radio} label="Redis" detail={health.redis.message} status={health.redis} />
-            </div>
-          ) : (
-            <div className="status-message">
-              {connection.state === "loading" ? <LoaderCircle className="spin" size={17} /> : <WifiOff size={17} />}
-              <div><strong>{connection.state === "loading" ? "Checking your backend" : "Backend could not be reached"}</strong><span>{connection.state === "offline" ? `Confirm the API is running at ${getApiBaseUrl()}.` : "Live component status will appear here."}</span></div>
-            </div>
-          )}
-          <div className="panel-footer">
-            <span>{connection.state === "online" ? `Last checked ${connection.checkedAt.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Health checks run automatically"}</span>
-            <button className="text-button" onClick={onOpenSettings}>View configuration <ArrowUpRight size={13} /></button>
-          </div>
-        </section>
-
-        <section className="panel workspace-panel">
-          <div className="panel-heading">
-            <div><span className="panel-kicker">YOUR WORKSPACE</span><h2>Growth projects</h2></div>
-            <button className="icon-button" onClick={onNewProject} aria-label="Add new project"><Plus size={16} /></button>
-          </div>
-          {projects.length === 0 ? (
-            <div className="project-empty-compact">
-              <div className="empty-art"><div className="empty-art-center"><Sparkles size={20} /></div><span className="orbit orbit-one" /><span className="orbit orbit-two" /><span className="orbit-dot" /></div>
-              <strong>No projects yet</strong>
-              <span>Projects will show up here when added.</span>
-            </div>
-          ) : (
-            <div className="compact-project-list">
-              {projects.slice(0, 4).map((p) => (
-                <div key={p.id} className="compact-project-row" onClick={onOpenProjects} role="button" tabIndex={0} onKeyDown={(e) => e.key === "Enter" && onOpenProjects()}>
-                  <div className="compact-project-name">{p.name}</div>
-                  <span className={`badge badge-${p.status}`}>{p.status}</span>
-                </div>
-              ))}
-              {projects.length > 4 && (
-                <button className="text-button" onClick={onOpenProjects}>+{projects.length - 4} more</button>
-              )}
-            </div>
-          )}
-          <button className="panel-link" onClick={onOpenProjects}>Explore projects <ArrowUpRight size={14} /></button>
-        </section>
-      </div>
-
-      <section className="panel foundation-panel">
-        <div className="foundation-icon"><Sparkles size={18} /></div>
-        <div className="foundation-copy"><span className="panel-kicker">PROJECT FOUNDATION</span><h2>Your growth workspace is taking shape.</h2><p>The core application, dashboard, and local infrastructure are ready to configure. Connect services to see their live status here.</p></div>
-        <button className="button button-quiet" onClick={onOpenSettings}>Review setup <ArrowUpRight size={14} /></button>
-        <div className="foundation-glow" />
-      </section>
-    </>
   );
 }
 
@@ -971,28 +895,6 @@ function CreateProjectModal({
 }
 
 // ─── Shared components ────────────────────────────────────────────────────────
-
-function MetricCard({ icon: Icon, label, value, detail, tone, trend }: { icon: LucideIcon; label: string; value: string; detail: string; tone: string; trend: ReactNode }) {
-  return (
-    <section className="metric-card panel">
-      <div className="metric-top"><span className={`metric-icon ${tone}`}><Icon size={16} strokeWidth={1.9} /></span><span className={`metric-trend ${tone}`}>{trend}</span></div>
-      <div className="metric-label">{label}</div>
-      <div className="metric-value">{value}</div>
-      <div className="metric-detail">{detail}</div>
-    </section>
-  );
-}
-
-function HealthRow({ icon: Icon, label, detail, status }: { icon: LucideIcon; label: string; detail: string; status: ComponentHealth }) {
-  const labelByStatus = { connected: "Connected", not_configured: "Not configured", unavailable: "Unavailable" };
-  return (
-    <div className="health-row">
-      <div className="health-row-icon"><Icon size={16} strokeWidth={1.8} /></div>
-      <div className="health-row-copy"><strong>{label}</strong><span>{detail}</span></div>
-      <StatusBadge status={status.status} label={labelByStatus[status.status]} />
-    </div>
-  );
-}
 
 function StatusBadge({ status, label }: { status: ComponentHealth["status"]; label: string }) {
   return <span className={`status-badge ${status}`}><span className="status-dot" />{label}</span>;

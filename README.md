@@ -75,7 +75,16 @@ The database connectivity test runs when `UGA_TEST_DATABASE_URL` is set; otherwi
 
 ### Dedicated PostgreSQL test database
 
-`UGA_TEST_DATABASE_URL` must always target a database that is separate from `universal_growth`. The current integration test only runs `SELECT 1`, but keeping a dedicated database prevents future tests from ever affecting development data.
+`UGA_TEST_DATABASE_URL` must always target a database that is separate from `universal_growth`. The integration tests run inside an outer transaction that is always rolled back, but keeping a dedicated database guarantees test data can never affect development records.
+
+The test database must be migrated to the current Alembic head before running the PostgreSQL integration tests (`tests/test_database.py` and `tests/test_postgres_integrity.py`). Point `UGA_DATABASE_URL` at the test database only for the migration command, for example:
+
+```powershell
+$env:UGA_DATABASE_URL = "postgresql+psycopg://uga:<url-encoded-password>@127.0.0.1:15432/universal_growth_test"
+cd apps/backend
+.\.venv\Scripts\python.exe -m alembic upgrade head
+Remove-Item Env:UGA_DATABASE_URL
+```
 
 After reviewing the operation, create the dedicated database once using the local PostgreSQL administrator account:
 

@@ -12,6 +12,8 @@ from app.schemas.goal import (
     GoalMetricUpdateCreate,
     GoalMetricUpdateResponse,
     GoalStatus,
+    GoalStatusHistoryListResponse,
+    GoalStatusHistoryResponse,
     StrategyGoalCreate,
     StrategyGoalResponse,
     StrategyGoalUpdate,
@@ -112,6 +114,20 @@ def _to_metric_update_response(u) -> GoalMetricUpdateResponse:
         notes=u.notes,
         actor=u.actor,
         created_at=u.created_at,
+    )
+
+
+def _to_goal_history_response(h) -> GoalStatusHistoryResponse:
+    return GoalStatusHistoryResponse(
+        id=h.id,
+        goal_id=h.goal_id,
+        project_id=h.project_id,
+        previous_status=h.previous_status,
+        new_status=h.new_status,
+        reason=h.reason,
+        actor=h.actor,
+        system_metadata=h.system_metadata_json,
+        created_at=h.created_at,
     )
 
 
@@ -297,7 +313,10 @@ def create_goal(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> StrategyGoalResponse:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    goal = goal_service.create_goal(strategy_id_or_slug, data, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    goal = goal_service.create_goal(
+        strategy.id, data, project_id=project.id, actor=identity.owner
+    )
     return _to_goal_response(goal)
 
 
@@ -315,9 +334,8 @@ def get_goal(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> StrategyGoalResponse:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    # Also validates strategy exists
-    goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
-    goal = goal_service.get_goal(goal_id, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    goal = goal_service.get_goal(goal_id, strategy.id, project_id=project.id)
     return _to_goal_response(goal)
 
 
@@ -336,8 +354,10 @@ def update_goal(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> StrategyGoalResponse:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
-    goal = goal_service.update_goal(goal_id, data, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    goal = goal_service.update_goal(
+        goal_id, strategy.id, data, project_id=project.id, actor=identity.owner
+    )
     return _to_goal_response(goal)
 
 
@@ -355,8 +375,8 @@ def delete_goal(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> Response:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
-    goal_service.delete_goal(goal_id, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    goal_service.delete_goal(goal_id, strategy.id, project_id=project.id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
@@ -376,9 +396,9 @@ def record_goal_progress(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> GoalMetricUpdateResponse:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
     _, metric_record = goal_service.record_progress(
-        goal_id, data, project_id=project.id, actor=identity.owner
+        goal_id, strategy.id, data, project_id=project.id, actor=identity.owner
     )
     return _to_metric_update_response(metric_record)
 
@@ -397,9 +417,31 @@ def get_goal_metric_history(
     goal_service: GoalService = Depends(get_goal_service),
 ) -> list[GoalMetricUpdateResponse]:
     project = project_service.get_project(project_id_or_slug, owner=identity.owner)
-    goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
-    updates = goal_service.get_metric_history(goal_id, project_id=project.id)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    updates = goal_service.get_metric_history(goal_id, strategy.id, project_id=project.id)
     return [_to_metric_update_response(u) for u in updates]
+
+
+@router.get(
+    "/{strategy_id_or_slug}/goals/{goal_id}/history",
+    response_model=GoalStatusHistoryListResponse,
+    summary="Get status history timeline for a goal",
+)
+def get_goal_status_history(
+    project_id_or_slug: str,
+    strategy_id_or_slug: str,
+    goal_id: str,
+    identity: AuthIdentity = Depends(get_current_identity),
+    project_service: ProjectService = Depends(get_project_service),
+    goal_service: GoalService = Depends(get_goal_service),
+) -> GoalStatusHistoryListResponse:
+    project = project_service.get_project(project_id_or_slug, owner=identity.owner)
+    strategy = goal_service._resolve_strategy(strategy_id_or_slug, project_id=project.id)
+    history = goal_service.get_status_history(goal_id, strategy.id, project_id=project.id)
+    return GoalStatusHistoryListResponse(
+        items=[_to_goal_history_response(h) for h in history],
+        total=len(history),
+    )
 
 
 # -----------------------------------------------------------------------------

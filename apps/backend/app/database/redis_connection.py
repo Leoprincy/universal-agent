@@ -18,6 +18,11 @@ class RedisConnection:
     def configured(self) -> bool:
         return self._client is not None
 
+    @property
+    def client(self):
+        """Expose the async client for queue adapters (read-only use)."""
+        return self._client
+
     async def check(self) -> ComponentHealth:
         if self._client is None:
             return ComponentHealth(status="not_configured", message="Redis URL is not configured")

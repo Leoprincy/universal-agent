@@ -476,6 +476,7 @@ class TestMultiTenancyAndCompositeFKIsolation:
                 target_value=10.0,
             ),
             project_id=p1.id,
+            actor="test",
         )
 
         # Attempt to insert metric update for goal_p1 under project_id=P2

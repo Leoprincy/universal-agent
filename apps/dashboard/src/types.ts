@@ -374,6 +374,124 @@ export interface GoalMetricUpdateInput {
   notes?: string;
 }
 
+export interface GoalStatusHistory {
+  id: string;
+  goal_id: string;
+  project_id: string;
+  previous_status?: GoalStatus | null;
+  new_status: GoalStatus;
+  reason?: string | null;
+  actor: string;
+  system_metadata?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface GoalStatusHistoryListResponse {
+  items: GoalStatusHistory[];
+  total: number;
+}
+
+// ─── Phase 6: Integration Providers & Actions ─────────────────────────────
+
+export type IntegrationActionStatus =
+  | "pending_approval"
+  | "approved"
+  | "rejected"
+  | "expired"
+  | "executing"
+  | "succeeded"
+  | "failed"
+  | "cancelled";
+
+export interface IntegrationProvider {
+  id: string;
+  project_id: string;
+  name: string;
+  adapter_type: string;
+  enabled: boolean;
+  sandbox_only: boolean;
+  rate_limit_per_minute: number;
+  config?: Record<string, unknown> | null;
+  has_credential: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationProviderCreateInput {
+  name: string;
+  adapter_type?: string;
+  enabled?: boolean;
+  sandbox_only?: boolean;
+  rate_limit_per_minute?: number;
+  config?: Record<string, unknown>;
+}
+
+export interface IntegrationProviderUpdateInput {
+  enabled?: boolean;
+  sandbox_only?: boolean;
+  rate_limit_per_minute?: number;
+  config?: Record<string, unknown>;
+}
+
+export interface IntegrationAction {
+  id: string;
+  project_id: string;
+  provider_id: string;
+  action_type: string;
+  payload: Record<string, unknown>;
+  payload_hash: string;
+  status: IntegrationActionStatus;
+  idempotency_key?: string | null;
+  actor: string;
+  approver?: string | null;
+  decision_reason?: string | null;
+  pending_approval_expires_at: string;
+  approval_expires_at?: string | null;
+  decided_at?: string | null;
+  executed_at?: string | null;
+  attempt_count: number;
+  result?: Record<string, unknown> | null;
+  error?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface IntegrationActionCreateInput {
+  action_type: string;
+  payload?: Record<string, unknown>;
+  idempotency_key?: string;
+}
+
+export interface IntegrationActionListResponse {
+  items: IntegrationAction[];
+  total: number;
+}
+
+export interface IntegrationActionEvent {
+  id: string;
+  action_id: string;
+  project_id: string;
+  event_type: string;
+  actor: string;
+  detail?: Record<string, unknown> | null;
+  seq: number;
+  created_at: string;
+}
+
+export interface IntegrationCallLog {
+  id: string;
+  action_id: string;
+  project_id: string;
+  provider_id: string;
+  attempt: number;
+  mode: string;
+  status: string;
+  response_status?: number | null;
+  latency_ms?: number | null;
+  error?: string | null;
+  created_at: string;
+}
+
 export interface AssociatedOpportunityItem {
   strategy_id: string;
   opportunity_id: string;
@@ -394,4 +512,228 @@ export interface StrategyOpportunityAssociationResponse {
   project_id: string;
   strategic_rationale?: string | null;
   created_at: string;
+}
+
+// ─── Phase 7: Measurement & Learning ──────────────────────────────────────
+
+export interface SuccessCriterion {
+  metric_name: string;
+  comparator: "gt" | "gte" | "lt" | "lte";
+  threshold: number;
+  min_sample_size?: number | null;
+  window_days?: number | null;
+}
+
+export interface SuccessCriteria {
+  criteria: SuccessCriterion[];
+}
+
+export interface Experiment {
+  id: string;
+  project_id: string;
+  strategy_id: string;
+  goal_id?: string | null;
+  name: string;
+  hypothesis?: string | null;
+  success_criteria?: { criteria?: SuccessCriterion[] } | null;
+  status: "draft" | "in_review" | "running" | "completed" | "cancelled";
+  started_at?: string | null;
+  ends_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ExperimentListResponse {
+  items: Experiment[];
+  total: number;
+}
+
+export interface ExperimentOutcome {
+  id: string;
+  experiment_id: string;
+  project_id: string;
+  metric_name: string;
+  value: number;
+  sample_size?: number | null;
+  observed_at: string;
+  source: "manual" | "integration" | "import";
+  source_ref?: string | null;
+  notes?: string | null;
+  actor: string;
+  supersedes_id?: string | null;
+  created_at: string;
+}
+
+export interface CriterionResult {
+  metric_name: string;
+  comparator: string;
+  threshold: number;
+  status: "pass" | "fail" | "inconclusive";
+  observed_value?: number | null;
+  sample_size?: number | null;
+  reason: string;
+}
+
+export interface EvaluationRationale {
+  criteria?: CriterionResult[];
+  window?: {
+    started_at?: string | null;
+    ends_at?: string | null;
+    evaluated_at?: string;
+  };
+  note?: string;
+  reason?: string;
+}
+
+export interface ExperimentEvaluation {
+  id: string;
+  experiment_id: string;
+  project_id: string;
+  verdict: "succeeded" | "inconclusive" | "failed";
+  rationale?: EvaluationRationale | null;
+  evaluated_at: string;
+  actor: string;
+  created_at: string;
+}
+
+export interface ExperimentStatusHistoryEntry {
+  id: string;
+  experiment_id: string;
+  project_id: string;
+  previous_status?: string | null;
+  new_status: string;
+  reason?: string | null;
+  actor: string;
+  system_metadata?: Record<string, unknown> | null;
+  created_at: string;
+}
+
+export interface LearningEvidence {
+  outcome_ids?: string[];
+  evaluation_ids?: string[];
+}
+
+export interface LearningRecord {
+  id: string;
+  project_id: string;
+  strategy_id?: string | null;
+  experiment_id?: string | null;
+  title: string;
+  insight: string;
+  category?: string | null;
+  status: "candidate" | "validated" | "rejected";
+  evidence?: { outcome_ids?: string[]; evaluation_ids?: string[] } | null;
+  validated_by?: string | null;
+  validated_at?: string | null;
+  rejected_by?: string | null;
+  rejected_at?: string | null;
+  rejection_reason?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface LearningListResponse {
+  items: LearningRecord[];
+  total: number;
+}
+
+export type JobStatus = "pending" | "queued" | "running" | "completed" | "failed" | "cancelled";
+
+export interface Job {
+  id: string;
+  project_id: string;
+  job_type: string;
+  payload_json?: Record<string, unknown> | null;
+  payload?: Record<string, unknown> | null;
+  status: JobStatus;
+  priority: number;
+  scheduled_at: string | null;
+  started_at: string | null;
+  completed_at: string | null;
+  attempt_count: number;
+  max_attempts: number;
+  last_error: string | null;
+  idempotency_key: string | null;
+  correlation_id: string | null;
+  locked_by: string | null;
+  locked_until: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobListResponse {
+  items: Job[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface JobEvent {
+  id: string;
+  job_id: string;
+  project_id: string;
+  seq: number;
+  event_type: string;
+  from_status: string | null;
+  to_status: string;
+  message: string | null;
+  actor: string;
+  created_at: string;
+}
+
+export interface JobStats {
+  pending: number;
+  queued: number;
+  running: number;
+  completed: number;
+  failed: number;
+  cancelled: number;
+  with_retries: number;
+}
+
+export interface JobSchedule {
+  id: string;
+  project_id: string;
+  name: string;
+  job_type: string;
+  payload: Record<string, unknown> | null;
+  interval_seconds: number;
+  next_run_at: string;
+  last_run_at: string | null;
+  enabled: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JobScheduleListResponse {
+  items: JobSchedule[];
+  total: number;
+}
+
+export interface WorkerInfo {
+  worker_id: string;
+  last_seen: string | null;
+  age_seconds: number;
+  alive: boolean;
+  concurrency: number | null;
+  jobs_completed: number | null;
+  jobs_failed: number | null;
+}
+
+export interface OpsOverview {
+  workers: WorkerInfo[];
+  worker_heartbeat_store: string;
+  active_workers: number;
+  queue_depth: number | null;
+  jobs: Record<string, number>;
+  outbox: Record<string, number>;
+  expired_leases: number;
+  retries: Record<string, number>;
+  schedules: {
+    id: string; project_id: string; name: string; job_type: string;
+    enabled: boolean; interval_seconds: number;
+    next_run_at: string | null; last_run_at: string | null;
+  }[];
 }

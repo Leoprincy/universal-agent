@@ -34,6 +34,7 @@ def test_health_endpoint_reports_unconfigured_services_truthfully() -> None:
         "application": "running",
         "database": {"status": "not_configured", "message": "Database URL is not configured"},
         "redis": {"status": "not_configured", "message": "Redis URL is not configured"},
+        "queue": None,
     }
 
 

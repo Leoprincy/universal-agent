@@ -2,11 +2,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Sequence
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.core.errors import NotFoundError
-from app.database.models import ResearchRecord
+from app.core.errors import ConflictError, NotFoundError, UnprocessableEntityError
+from app.database.models import OpportunityResearchAssociation, ResearchRecord
 from app.schemas.research import ResearchRecordCreate, ResearchRecordUpdate
 
 
@@ -108,7 +109,13 @@ class ResearchService:
             "metadata_json": record.metadata_json,
         }
         # Validates per source_type
-        ResearchRecordCreate.model_validate(full_dict)
+        try:
+            ResearchRecordCreate.model_validate(full_dict)
+        except ValidationError as exc:
+            raise UnprocessableEntityError(
+                "Updated research record violates source-type requirements",
+                code="validation_error",
+            ) from exc
 
         try:
             self._session.commit()
@@ -120,6 +127,19 @@ class ResearchService:
 
     def delete_record(self, record_id: str, project_id: str) -> None:
         record = self.get_record(record_id, project_id=project_id)
+
+        # Guard: research linked to opportunities cannot be deleted
+        link_count = self._session.scalar(
+            select(func.count())
+            .select_from(OpportunityResearchAssociation)
+            .where(OpportunityResearchAssociation.research_id == record.id)
+        )
+        if link_count and link_count > 0:
+            raise ConflictError(
+                "Research record is linked to one or more opportunities. Unlink it first to preserve evidence traceability.",
+                code="cannot_delete_linked_research",
+            )
+
         try:
             self._session.delete(record)
             self._session.commit()
